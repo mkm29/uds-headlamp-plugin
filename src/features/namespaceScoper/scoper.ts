@@ -14,7 +14,21 @@
  * limitations under the License.
  */
 
-import { parseCsv } from './probe';
+import { ApiProxy } from '@kinvolk/headlamp-plugin/lib';
+import { currentCluster } from '../../common/cluster';
+import { store } from '../../settings/config';
+import { getScoperConfig, isFeatureEnabled, ScoperConfig } from '../../settings/flags';
+import {
+  computeAllowedFromProbes,
+  isValidNamespace,
+  parseCsv,
+  ProbeResult,
+  ResourceAttributes,
+  ResourceRule,
+  ruleAllows,
+  selfSubjectAccessReviewBody,
+  selfSubjectRulesReviewBody,
+} from './probe';
 
 const PREFIX = '[uds-core:namespace-scoper]';
 const log = {
@@ -105,4 +119,214 @@ export async function resolveCandidateNamespaces(deps?: {
     hardcoded
   );
   return { source: 'hardcoded-fallback', namespaces: hardcoded };
+}
+
+const FEATURE_ID = 'namespaceScoper';
+
+/** Load Headlamp's per-cluster settings from localStorage (the key it uses). */
+function loadClusterSettings(clusterName: string): Record<string, any> {
+  if (!clusterName) {
+    return {};
+  }
+  try {
+    return JSON.parse(localStorage.getItem(`cluster_settings.${clusterName}`) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+/** Store Headlamp's per-cluster settings to localStorage (the key it uses). */
+function storeClusterSettings(clusterName: string, settings: Record<string, any>): void {
+  if (!clusterName) {
+    return;
+  }
+  localStorage.setItem(`cluster_settings.${clusterName}`, JSON.stringify(settings));
+}
+
+/**
+ * Probe one namespace: SelfSubjectRulesReview first (one review returns all
+ * rules for the namespace), falling back to SelfSubjectAccessReview when the
+ * rules review is unavailable or reports an evaluation error. Never throws — a
+ * failed probe is reported as not-accessible.
+ */
+export async function probeNamespace(
+  namespace: string,
+  attrs: ResourceAttributes
+): Promise<ProbeResult> {
+  // 1. SelfSubjectRulesReview.
+  try {
+    const res: any = await ApiProxy.request(
+      '/apis/authorization.k8s.io/v1/selfsubjectrulesreviews',
+      {
+        method: 'POST',
+        body: JSON.stringify(selfSubjectRulesReviewBody(namespace)),
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+    const status = res?.status || {};
+    const rules: ResourceRule[] = Array.isArray(status.resourceRules)
+      ? status.resourceRules
+      : [];
+    if (!status.evaluationError && rules.length > 0) {
+      return {
+        namespace,
+        allowed: ruleAllows(rules, attrs),
+        method: 'ssrr',
+        evaluationError: status.evaluationError || undefined,
+      };
+    }
+    // Empty rules or an evaluation error -> fall through to SSAR.
+  } catch (e: any) {
+    log.debug(`SSRR failed for "${namespace}", falling back to SSAR:`, e?.message ?? e);
+  }
+
+  // 2. SelfSubjectAccessReview fallback.
+  try {
+    const res: any = await ApiProxy.request(
+      '/apis/authorization.k8s.io/v1/selfsubjectaccessreviews',
+      {
+        method: 'POST',
+        body: JSON.stringify(selfSubjectAccessReviewBody(namespace, attrs)),
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+    const status = res?.status || {};
+    return {
+      namespace,
+      allowed: Boolean(status.allowed),
+      method: 'ssar',
+      reason: status.reason || undefined,
+      evaluationError: status.evaluationError || undefined,
+    };
+  } catch (e: any) {
+    const msg = e?.message ? String(e.message) : String(e);
+    log.warn(`probe failed for "${namespace}" (treating as not-accessible):`, msg);
+    return { namespace, allowed: false, method: 'ssar', error: msg };
+  }
+}
+
+/**
+ * List namespace names via the API (best-effort), optionally label-filtered.
+ * Returns null when the user cannot list namespaces — the caller then falls
+ * back to the candidate list.
+ */
+async function listNamespaces(labelSelector: string): Promise<string[] | null> {
+  const query = labelSelector ? `?labelSelector=${encodeURIComponent(labelSelector)}` : '';
+  try {
+    const res: any = await ApiProxy.request(`/api/v1/namespaces${query}`, { method: 'GET' });
+    const items: any[] = Array.isArray(res?.items) ? res.items : [];
+    return items.map(i => i?.metadata?.name).filter(Boolean);
+  } catch (e: any) {
+    log.info('list-all: cannot list namespaces, will use candidate list:', e?.message ?? e);
+    return null;
+  }
+}
+
+/** Resolve the namespace set to probe, per the configured strategy. */
+async function resolveNamespaces(cfg: ScoperConfig): Promise<string[]> {
+  if (cfg.strategy === 'list-all') {
+    const listed = await listNamespaces(cfg.labelSelector);
+    if (listed && listed.length > 0) {
+      return listed;
+    }
+  }
+  const { namespaces } = await resolveCandidateNamespaces();
+  return namespaces;
+}
+
+/** Resolve and probe the namespace set for the current cluster + config. */
+export async function computeScope(): Promise<{
+  cluster: string | null;
+  allowed: string[];
+  probes: ProbeResult[];
+}> {
+  const cluster = currentCluster();
+  const cfg = getScoperConfig(store.get(), cluster ?? '');
+  const attrs: ResourceAttributes = {
+    verb: cfg.verb,
+    group: cfg.group,
+    resource: cfg.resource,
+    subresource: cfg.subresource,
+  };
+
+  const raw = await resolveNamespaces(cfg);
+  const candidates = raw.filter(isValidNamespace);
+  const invalid = raw.filter(ns => !isValidNamespace(ns));
+  if (invalid.length) {
+    log.warn('ignoring candidate names that are not valid DNS-1123 labels:', invalid);
+  }
+
+  log.info(
+    `probing ${candidates.length} namespace(s) as the impersonated user ` +
+      `(cluster="${cluster}", strategy=${cfg.strategy}, probe="${attrs.verb} ${attrs.resource}` +
+      `${attrs.subresource ? '/' + attrs.subresource : ''}")`
+  );
+
+  const probes = await Promise.all(candidates.map(ns => probeNamespace(ns, attrs)));
+  const allowed = computeAllowedFromProbes(probes);
+  log.info(`accessible namespaces (${allowed.length}/${candidates.length}):`, allowed);
+  return { cluster, allowed, probes };
+}
+
+/**
+ * Compute the scope and write it into Headlamp's per-cluster namespace filter.
+ * Fail-open: never writes an empty list; leaves the filter untouched instead.
+ */
+export async function applyScope(): Promise<{
+  cluster: string | null;
+  allowed: string[];
+  probes: ProbeResult[];
+} | null> {
+  const cluster = currentCluster();
+  if (!cluster) {
+    log.warn('applyScope: no active cluster; skipping');
+    return null;
+  }
+  if (!isFeatureEnabled(store.get(), cluster, FEATURE_ID, true)) {
+    log.info(`applyScope: scoping disabled for cluster "${cluster}"; skipping`);
+    return null;
+  }
+
+  const result = await computeScope();
+  if (result.allowed.length === 0) {
+    log.warn(
+      'applyScope: NO accessible namespaces; leaving the namespace filter UNTOUCHED (fail-open)'
+    );
+    return result;
+  }
+
+  const settings = loadClusterSettings(cluster);
+  const current: string[] = settings.allowedNamespaces || [];
+  const changed =
+    current.length !== result.allowed.length ||
+    !result.allowed.every(ns => current.includes(ns));
+  if (changed) {
+    settings.allowedNamespaces = result.allowed;
+    storeClusterSettings(cluster, settings);
+    log.info(`applyScope: set allowedNamespaces for "${cluster}" to`, result.allowed);
+  } else {
+    log.info(`applyScope: allowedNamespaces already up to date for "${cluster}"`);
+  }
+  return result;
+}
+
+// Cluster watcher: getCluster() is null until a cluster is active, and with
+// OpenUnison SSO the authenticated view can settle after load. Poll and
+// (re)apply whenever the active cluster changes.
+let lastAppliedCluster: string | null = null;
+
+function watchCluster(attempt = 0): void {
+  const cluster = currentCluster();
+  if (cluster && cluster !== lastAppliedCluster) {
+    lastAppliedCluster = cluster;
+    log.info(`active cluster is now "${cluster}"; applying namespace scope`);
+    applyScope().catch(e => log.error('applyScope threw:', e));
+  }
+  const delay = attempt < 60 ? 500 : 2000;
+  setTimeout(() => watchCluster(attempt + 1), delay);
+}
+
+/** Start the background cluster watcher (idempotent per module load). */
+export function startClusterWatcher(): void {
+  watchCluster();
 }
