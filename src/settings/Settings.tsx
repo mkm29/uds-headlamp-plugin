@@ -29,7 +29,15 @@ import { useState } from 'react';
 import { currentCluster } from '../common/cluster';
 import { useUdsDetect } from '../common/udsDetect';
 import { FEATURES } from '../features/manifest';
-import { DEFAULT_FLAGS, isFeatureEnabled, setFeature, UdsFlags } from './flags';
+import {
+  DEFAULT_FLAGS,
+  getScoperConfig,
+  isFeatureEnabled,
+  ProbeStrategy,
+  setFeature,
+  setScoperConfig,
+  UdsFlags,
+} from './flags';
 
 /**
  * Plugin settings page (registered at /settings/plugins/uds-core).
@@ -107,6 +115,70 @@ export function Settings(props: PluginSettingsDetailsProps) {
             />
           </Box>
         ))}
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>
+          Namespace scoping (probe)
+        </Typography>
+        {(() => {
+          const scoper = getScoperConfig(flags, cluster);
+          const patch = (p: Partial<typeof scoper>) =>
+            onDataChange?.(setScoperConfig(flags, cluster, p));
+          return (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <TextField
+                  size="small"
+                  label="Verb"
+                  value={scoper.verb}
+                  onChange={e => patch({ verb: e.target.value })}
+                />
+                <TextField
+                  size="small"
+                  label="Group"
+                  placeholder="(core)"
+                  value={scoper.group}
+                  onChange={e => patch({ group: e.target.value })}
+                />
+                <TextField
+                  size="small"
+                  label="Resource"
+                  value={scoper.resource}
+                  onChange={e => patch({ resource: e.target.value })}
+                />
+                <TextField
+                  size="small"
+                  label="Subresource"
+                  value={scoper.subresource}
+                  onChange={e => patch({ subresource: e.target.value })}
+                />
+              </Box>
+              <Box>
+                <Typography variant="body2" gutterBottom>
+                  Strategy
+                </Typography>
+                <Select
+                  size="small"
+                  value={scoper.strategy}
+                  onChange={e => patch({ strategy: e.target.value as ProbeStrategy })}
+                >
+                  <MenuItem value="candidates">Candidate list</MenuItem>
+                  <MenuItem value="list-all">List all namespaces</MenuItem>
+                </Select>
+              </Box>
+              {scoper.strategy === 'list-all' && (
+                <TextField
+                  size="small"
+                  label="Label selector"
+                  placeholder="e.g. kubernetes.io/metadata.name"
+                  value={scoper.labelSelector}
+                  onChange={e => patch({ labelSelector: e.target.value })}
+                />
+              )}
+            </Box>
+          );
+        })()}
       </Box>
 
       <TextField

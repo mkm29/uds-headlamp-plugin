@@ -15,6 +15,7 @@
  */
 
 import { Feature } from '../types';
+import { applyScope, computeScope, startClusterWatcher } from './scoper';
 
 /** Feature (1): RBAC namespace scoping. Works without UDS Core. */
 export const namespaceScoperFeature: Feature = {
@@ -22,9 +23,29 @@ export const namespaceScoperFeature: Feature = {
   title: 'RBAC namespace scoping',
   defaultEnabled: true,
   register() {
-    // TODO(phase-1): migrate the SelfSubjectAccessReview / SelfSubjectRulesReview
-    // scoper here — register an app-bar action (or background effect) that scans
-    // candidate namespaces as the impersonated user and writes allowedNamespaces.
-    // Gate visibility via live config (ADR-0004), not this one-shot call.
+    // Registration is one-shot (ADR-0004): always start the watcher; it gates
+    // each apply on the live per-cluster enable flag, so toggling the feature
+    // off stops scoping on the next tick / reload without needing to
+    // conditionally skip registration here.
+    startClusterWatcher();
+
+    // On-demand console helpers for operators (filter console on
+    // "uds-core:namespace-scoper"):
+    //   udsScoperDebug() -> re-probe and print a namespace -> access table
+    //   udsScoperApply() -> re-probe and write the namespace filter now
+    (window as any).udsScoperDebug = async () => {
+      const r = await computeScope();
+      // eslint-disable-next-line no-console
+      console.table(
+        r.probes.map(p => ({
+          namespace: p.namespace,
+          access: p.allowed ? 'allowed' : 'denied',
+          method: p.method,
+          detail: p.reason || p.evaluationError || p.error || '',
+        }))
+      );
+      return r;
+    };
+    (window as any).udsScoperApply = async () => applyScope();
   },
 };

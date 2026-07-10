@@ -14,15 +14,32 @@
  * limitations under the License.
  */
 
-import { getCluster } from '@kinvolk/headlamp-plugin/lib/Utils';
+/**
+ * Cluster name resolution.
+ *
+ * We parse the cluster from the URL directly instead of importing getCluster
+ * from a headlamp-plugin submodule: those submodule paths are not in the
+ * plugin externals map and resolve to undefined globals in the deployed
+ * Headlamp app, crashing the whole plugin on load. See
+ * headlamp-namespace-scoper-plugin/src/index.tsx (lines 7-16).
+ */
+
+/** Parse the cluster name from a Headlamp "/c/<cluster>" pathname. Pure. */
+export function getClusterFromPath(pathname: string): string | null {
+  const m = pathname.match(/\/c\/([^/?#]+)/);
+  if (!m) {
+    return null;
+  }
+  // Multi-cluster views join names with "+"; use the first for the settings key.
+  return decodeURIComponent(m[1]).split('+')[0] || null;
+}
 
 /**
  * The current cluster name from the URL, or null when none is selected.
  *
- * Note: at plugin-load time (registration) the URL may not yet name a cluster,
- * so callers must treat null defensively — per-cluster gating happens in live
- * filters/guards that re-read the cluster reactively (ADR-0004).
+ * Note: at plugin-load time the URL may not yet name a cluster, so callers
+ * must treat null defensively (ADR-0004).
  */
 export function currentCluster(): string | null {
-  return getCluster();
+  return getClusterFromPath(window.location.pathname);
 }

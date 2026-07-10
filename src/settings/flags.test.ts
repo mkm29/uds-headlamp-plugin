@@ -47,3 +47,39 @@ describe('flags', () => {
     expect(next.clusters.c1.features).toEqual({ exemptions: true });
   });
 });
+
+import {
+  DEFAULT_SCOPER,
+  getScoperConfig,
+  setScoperConfig,
+} from './flags';
+
+describe('scoper config', () => {
+  it('returns DEFAULT_SCOPER when no override exists', () => {
+    expect(getScoperConfig(undefined, 'c1')).toEqual(DEFAULT_SCOPER);
+    expect(getScoperConfig(DEFAULT_FLAGS, 'c1')).toEqual(DEFAULT_SCOPER);
+  });
+
+  it('merges a partial override over the defaults', () => {
+    const cfg = setScoperConfig(DEFAULT_FLAGS, 'c1', { resource: 'secrets', verb: 'list' });
+    const got = getScoperConfig(cfg, 'c1');
+    expect(got.resource).toBe('secrets');
+    expect(got.verb).toBe('list');
+    // Untouched fields keep their defaults.
+    expect(got.subresource).toBe(DEFAULT_SCOPER.subresource);
+    expect(got.strategy).toBe(DEFAULT_SCOPER.strategy);
+  });
+
+  it('setScoperConfig is immutable and per-cluster', () => {
+    const cfg = setScoperConfig(DEFAULT_FLAGS, 'c1', { strategy: 'list-all' });
+    expect(DEFAULT_FLAGS.clusters).toEqual({});
+    expect(getScoperConfig(cfg, 'c2')).toEqual(DEFAULT_SCOPER);
+  });
+
+  it('coexists with feature flags on the same cluster', () => {
+    const withFeature = setFeature(DEFAULT_FLAGS, 'c1', 'namespaceScoper', false);
+    const withScoper = setScoperConfig(withFeature, 'c1', { verb: 'watch' });
+    expect(isFeatureEnabled(withScoper, 'c1', 'namespaceScoper', true)).toBe(false);
+    expect(getScoperConfig(withScoper, 'c1').verb).toBe('watch');
+  });
+});
