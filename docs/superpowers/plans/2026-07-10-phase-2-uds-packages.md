@@ -517,29 +517,65 @@ ______________________________________________________________________
 
 ## Issue 4: Package detail view (`Detail.tsx`, route)
 
-Add a read-only detail route for a single Package: metadata via `DetailsGrid`, a status summary, and a conditions table.
+Add a read-only detail route for a single Package rendering the **full** CR (per the enriched `resource.ts` model): a
+status summary, a conditions table, every status array (endpoints, SSO/authservice clients, monitors, probes), and the
+key spec sections (exposed services, network allow rules, SSO client configs, Prometheus monitors, CA bundle). Read
+through the typed accessors so nothing is `any`.
 
 **Files:**
 
 - Create: `src/features/packages/Detail.tsx`
-- Modify: `src/features/packages/index.ts` (append one detail route + point the list's row link at it)
+- Modify: `src/features/packages/index.tsx` (append one detail route + link the list name column to it)
 
 **Interfaces:**
 
-- Consumes: `Package`, `phaseToStatus` (Issue 2); the `register()` from Issue 3.
+- Consumes from `./resource`: `Package`, `PackageObject`, `packageStatus`, `packageSpec`, `phaseToStatus`, and the
+  `PackageStatus`/`PackageSpec` (+ nested `ExposeEntry`, `AllowRule`, `MonitorEntry`, `SsoClient`, `AuthserviceClient`,
+  `PackageCondition`) types; the `register()` from Issue 3.
+- Produces: `PackageDetail` React component; a `registerRoute` for `/uds-core/packages/:namespace/:name` named
+  `uds-package-detail`.
 
-- Produces: `PackageDetail` React component; a `registerRoute` for `/uds-core/packages/:namespace/:name`.
+**Data note:** `status.ssoClients`, `status.endpoints`, `status.monitors`, `status.probes` are **string[]** (names);
+`status.authserviceClients` is `{clientId, selector}[]`; the rich client config lives in **`spec.sso[]`**. So render the
+status arrays as simple name lists and the SSO/network detail from `spec`. All fields are optional — every accessor must
+default to `[]`/`'-'` and never throw (RBAC-graceful).
 
 - [ ] **Step 1: Implement `PackageDetail`**
 
-Create `src/features/packages/Detail.tsx` (Apache header). Use Headlamp's `DetailsGrid` (renders metadata + events) and
-add status sections via `extraInfo` / `extraSections`, plus a `ConditionsTable`.
+Create `src/features/packages/Detail.tsx` (Apache header). Use `DetailsGrid` for metadata + events, `extraInfo` for the
+status summary, and `extraSections` for the arrays/spec. Use `SimpleTable` for object arrays and a name list for the
+string arrays. Read via `packageStatus(pkg)` / `packageSpec(pkg)`.
 
 ```tsx
 import { CommonComponents, Router } from '@kinvolk/headlamp-plugin/lib';
-import { Package, phaseToStatus } from './resource';
+import { Box, Typography } from '@mui/material';
+import {
+  AllowRule,
+  ExposeEntry,
+  MonitorEntry,
+  Package,
+  PackageObject,
+  packageSpec,
+  packageStatus,
+  phaseToStatus,
+  SsoClient,
+} from './resource';
 
-const { DetailsGrid, StatusLabel, ConditionsTable, SectionBox, NameValueTable } = CommonComponents;
+const { DetailsGrid, StatusLabel, ConditionsTable, SectionBox, SimpleTable } = CommonComponents;
+
+/** Render a string[] as a simple bulleted list, or a muted dash when empty. */
+function NameList({ items }: { items?: string[] }) {
+  if (!items || items.length === 0) {
+    return <Typography color="textSecondary">-</Typography>;
+  }
+  return (
+    <Box component="ul" sx={{ m: 0, pl: 2 }}>
+      {items.map(i => (
+        <li key={i}>{i}</li>
+      ))}
+    </Box>
+  );
+}
 
 export function PackageDetail() {
   const { namespace, name } = Router.useParams<{ namespace: string; name: string }>();
@@ -550,50 +586,192 @@ export function PackageDetail() {
       name={name}
       namespace={namespace}
       withEvents
-      extraInfo={(pkg: any) =>
-        pkg && [
-          {
-            name: 'Status',
-            value: (
-              <StatusLabel status={phaseToStatus(pkg.status?.phase)}>
-                {pkg.status?.phase ?? 'Unknown'}
-              </StatusLabel>
-            ),
-          },
-          { name: 'Mesh Mode', value: pkg.status?.meshMode ?? '-' },
-          { name: 'Network Policies', value: String(pkg.status?.networkPolicyCount ?? 0) },
-          { name: 'Authorization Policies', value: String(pkg.status?.authorizationPolicyCount ?? 0) },
-          { name: 'Retry Attempt', value: pkg.status?.retryAttempt == null ? '-' : String(pkg.status.retryAttempt) },
-        ]
-      }
-      extraSections={(pkg: any) =>
-        pkg && [
+      extraInfo={(pkg: PackageObject | null) => {
+        const s = pkg ? packageStatus(pkg) : undefined;
+        return (
+          pkg && [
+            {
+              name: 'Status',
+              value: (
+                <StatusLabel status={phaseToStatus(s?.phase)}>{s?.phase ?? 'Unknown'}</StatusLabel>
+              ),
+            },
+            { name: 'Mesh Mode', value: s?.meshMode ?? '-' },
+            { name: 'Observed Generation', value: s?.observedGeneration == null ? '-' : String(s.observedGeneration) },
+            { name: 'Retry Attempt', value: s?.retryAttempt == null ? '-' : String(s.retryAttempt) },
+            { name: 'Network Policies', value: String(s?.networkPolicyCount ?? 0) },
+            { name: 'Authorization Policies', value: String(s?.authorizationPolicyCount ?? 0) },
+          ]
+        );
+      }}
+      extraSections={(pkg: PackageObject | null) => {
+        if (!pkg) {
+          return [];
+        }
+        const s = packageStatus(pkg);
+        const spec = packageSpec(pkg);
+        return [
+          // --- status arrays ---
           {
             id: 'uds-endpoints',
             section: (
-              <SectionBox title="Exposed Endpoints">
-                <NameValueTable
-                  rows={(pkg.status?.endpoints ?? []).map((e: string, i: number) => ({
-                    name: String(i),
-                    value: e,
-                  }))}
+              <SectionBox title="Endpoints">
+                <NameList items={s?.endpoints} />
+              </SectionBox>
+            ),
+          },
+          {
+            id: 'uds-sso-clients',
+            section: (
+              <SectionBox title="SSO Clients">
+                <NameList items={s?.ssoClients} />
+              </SectionBox>
+            ),
+          },
+          {
+            id: 'uds-authservice',
+            section: (
+              <SectionBox title="Authservice Clients">
+                <SimpleTable
+                  emptyMessage="None"
+                  columns={[
+                    { label: 'Client ID', getter: (c: { clientId: string }) => c.clientId },
+                    {
+                      label: 'Selector',
+                      getter: (c: { selector?: Record<string, string> }) =>
+                        Object.entries(c.selector ?? {})
+                          .map(([k, v]) => `${k}=${v}`)
+                          .join(', ') || '-',
+                    },
+                  ]}
+                  data={s?.authserviceClients ?? []}
                 />
               </SectionBox>
             ),
           },
           {
-            id: 'uds-sso',
+            id: 'uds-monitors',
             section: (
-              <SectionBox title="SSO Clients">
-                <NameValueTable
-                  rows={(pkg.status?.ssoClients ?? []).map((c: string, i: number) => ({
-                    name: String(i),
-                    value: c,
-                  }))}
+              <SectionBox title="Monitors">
+                <NameList items={s?.monitors} />
+              </SectionBox>
+            ),
+          },
+          {
+            id: 'uds-probes',
+            section: (
+              <SectionBox title="Probes">
+                <NameList items={s?.probes} />
+              </SectionBox>
+            ),
+          },
+          // --- spec: exposed services ---
+          {
+            id: 'uds-expose',
+            section: (
+              <SectionBox title="Exposed Services (spec.network.expose)">
+                <SimpleTable
+                  emptyMessage="None"
+                  columns={[
+                    { label: 'Host', getter: (e: ExposeEntry) => e.host },
+                    { label: 'Gateway', getter: (e: ExposeEntry) => e.gateway ?? 'tenant' },
+                    { label: 'Service', getter: (e: ExposeEntry) => e.service ?? '-' },
+                    { label: 'Port', getter: (e: ExposeEntry) => (e.port == null ? '-' : String(e.port)) },
+                    {
+                      label: 'Target Port',
+                      getter: (e: ExposeEntry) => (e.targetPort == null ? '-' : String(e.targetPort)),
+                    },
+                  ]}
+                  data={spec?.network?.expose ?? []}
                 />
               </SectionBox>
             ),
           },
+          // --- spec: network allow rules ---
+          {
+            id: 'uds-allow',
+            section: (
+              <SectionBox title="Network Allow Rules (spec.network.allow)">
+                <SimpleTable
+                  emptyMessage="None"
+                  columns={[
+                    { label: 'Direction', getter: (a: AllowRule) => a.direction },
+                    {
+                      label: 'Remote',
+                      getter: (a: AllowRule) =>
+                        a.remoteGenerated ?? a.remoteNamespace ?? a.remoteCidr ?? a.remoteHost ?? '-',
+                    },
+                    {
+                      label: 'Ports',
+                      getter: (a: AllowRule) =>
+                        (a.ports ?? (a.port != null ? [a.port] : [])).join(', ') || '-',
+                    },
+                    { label: 'Description', getter: (a: AllowRule) => a.description ?? '-' },
+                  ]}
+                  data={spec?.network?.allow ?? []}
+                />
+              </SectionBox>
+            ),
+          },
+          // --- spec: SSO client configs ---
+          {
+            id: 'uds-sso-config',
+            section: (
+              <SectionBox title="SSO Client Configuration (spec.sso)">
+                <SimpleTable
+                  emptyMessage="None"
+                  columns={[
+                    { label: 'Client ID', getter: (c: SsoClient) => c.clientId },
+                    { label: 'Name', getter: (c: SsoClient) => c.name },
+                    { label: 'Protocol', getter: (c: SsoClient) => c.protocol ?? 'openid-connect' },
+                    { label: 'Enabled', getter: (c: SsoClient) => (c.enabled === false ? 'No' : 'Yes') },
+                    {
+                      label: 'Redirect URIs',
+                      getter: (c: SsoClient) => (c.redirectUris ?? []).join(', ') || '-',
+                    },
+                    {
+                      label: 'Groups',
+                      getter: (c: SsoClient) => (c.groups?.anyOf ?? []).join(', ') || '-',
+                    },
+                  ]}
+                  data={spec?.sso ?? []}
+                />
+              </SectionBox>
+            ),
+          },
+          // --- spec: monitors config ---
+          {
+            id: 'uds-monitor-config',
+            section: (
+              <SectionBox title="Monitor Configuration (spec.monitor)">
+                <SimpleTable
+                  emptyMessage="None"
+                  columns={[
+                    { label: 'Kind', getter: (m: MonitorEntry) => m.kind ?? 'ServiceMonitor' },
+                    { label: 'Port Name', getter: (m: MonitorEntry) => m.portName },
+                    { label: 'Target Port', getter: (m: MonitorEntry) => String(m.targetPort) },
+                    { label: 'Path', getter: (m: MonitorEntry) => m.path ?? '/metrics' },
+                  ]}
+                  data={spec?.monitor ?? []}
+                />
+              </SectionBox>
+            ),
+          },
+          // --- spec: CA bundle presence ---
+          {
+            id: 'uds-cabundle',
+            section: (
+              <SectionBox title="CA Bundle">
+                <Typography>
+                  {spec?.caBundle?.configMap?.name
+                    ? `From ConfigMap ${spec.caBundle.configMap.name}` +
+                      (spec.caBundle.configMap.key ? ` (key ${spec.caBundle.configMap.key})` : '')
+                    : 'None'}
+                </Typography>
+              </SectionBox>
+            ),
+          },
+          // --- conditions ---
           {
             id: 'uds-conditions',
             section: (
@@ -602,19 +780,34 @@ export function PackageDetail() {
               </SectionBox>
             ),
           },
-        ]
-      }
+        ];
+      }}
     />
   );
 }
 ```
 
-**VERIFY during implementation:** confirm `DetailsGrid` props (`resourceType`, `name`, `namespace`, `withEvents`,
-`extraInfo`, `extraSections`) and their callback signatures against
-`node_modules/@kinvolk/headlamp-plugin/lib/components/common/Resource/Resource.d.ts` (DetailsGrid + ConditionsTable are
-confirmed present there). Confirm `ConditionsTable`'s prop name (`resource` vs `conditions`). Confirm `Router.useParams`
-is exported from the main barrel (`K8s`/`Router` are in `index.d.ts:18`); if not, use `react-router-dom`'s `useParams`
-(a shared module). Adjust `extraSections` item shape (`{ id, section }` vs returning bare nodes) to the installed type.
+**VERIFY during implementation:**
+
+- `DetailsGrid` props (`resourceType`, `name`, `namespace`, `withEvents`, `extraInfo`, `extraSections`) and the
+  `extraSections` item shape (`{ id, section }` vs bare nodes) against
+  `node_modules/@kinvolk/headlamp-plugin/lib/components/common/Resource/Resource.d.ts`. `extraInfo`/`extraSections` may
+  receive the item as the raw instance or `null` while loading — the `pkg &&` / `if (!pkg)` guards cover that; confirm
+  the callback param type and adjust.
+
+- `SimpleTable` column shape: confirm `{ label, getter }` vs `{ header, accessor }` / `datum` against
+  `node_modules/@kinvolk/headlamp-plugin/lib/components/common/SimpleTable.d.ts`, and the `emptyMessage`/`data` prop
+  names. Adjust the column objects to the installed type (they are the same across all sections, so one fix propagates).
+
+- `ConditionsTable`'s prop name (`resource` vs `conditions`) — pass whichever the installed type wants; `pkg.jsonData`
+  carries the full `status.conditions`.
+
+- `Router.useParams` is exported from the main barrel (`Router` is in `index.d.ts:18`); if not, use `react-router-dom`'s
+  `useParams` (a shared module — do not bundle it).
+
+- The `getter` param types above (`ExposeEntry`, `AllowRule`, etc.) are the enriched `resource.ts` types; if
+  `SimpleTable` types `getter` as `(row: T) => ...` off its `data` generic, these line up — otherwise cast the `data`
+  array to the element type.
 
 - [ ] **Step 2: Append the detail route in `index.ts`**
 
