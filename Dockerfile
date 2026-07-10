@@ -1,7 +1,7 @@
 ARG CANDIDATE_NAMESPACES
 FROM oven/bun:canary-debian@sha256:88ad267b0bb9d10cfcce12338a2020361405885f2deca6b0099cd213f6347124 AS builder
 WORKDIR /src
-COPY package.json bun.lock ./
+COPY package.json package-lock.json ./
 RUN bun install --frozen-lockfile
 COPY src ./src
 RUN HEADLAMP_APP_CANDIDATE_NAMESPACES=$CANDIDATE_NAMESPACES bun run build

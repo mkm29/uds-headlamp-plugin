@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: bun-${{ runner.os }}-
 
       - run: bun install --frozen-lockfile
@@ -59,7 +59,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: bun-${{ runner.os }}-
 
       - run: bun install --frozen-lockfile
