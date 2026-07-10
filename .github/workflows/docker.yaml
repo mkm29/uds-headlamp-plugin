@@ -1,11 +1,10 @@
 name: Docker
 on:
+  # Release-only: build + push exclusively on a version tag (v*). Release tags
+  # are cut from main, so this is the "release on main" trigger. Note: GitHub
+  # cannot filter tag pushes by branch in `on:` (see the guard note in PR #20).
   push:
-    branches: [main, develop]
     tags: ["v*"]
-  pull_request:
-    branches: [main, develop]
-  workflow_dispatch:
 concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: true
@@ -31,9 +30,7 @@ jobs:
       # QEMU enables the linux/arm64 build on the amd64 runner.
       - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-      # Do not log in (and do not push) on pull_request builds from forks.
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
         with:
           registry: ${{ env.REGISTRY }}
@@ -44,29 +41,33 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Only version tags trigger this workflow, so emit semver tags plus a
+          # short-sha tag for traceability. metadata-action's default
+          # latest=auto also tags the newest non-prerelease release as `latest`.
           tags: |
-            type=ref,event=pr
-            type=sha,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
       - name: Build and push
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          # Push on main/tags/dispatch; PRs build only (verify the Dockerfile).
-          push: ${{ github.event_name != 'pull_request' }}
+          # This workflow only runs on a version tag, so always push.
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Empty -> plugin falls back to its runtime namespace resolution.
           # Cluster-specific inlining stays a deploy-time concern (see tasks.yaml).
           build-args: |
             CANDIDATE_NAMESPACES=
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Release-only workflow: GHA cache is isolated per Git ref, so separate
+          # tags can't share it. Use a registry-backed cache image in GHCR, which
+          # any release build can read/write -- warming each release from the
+          # previous. mode=max caches intermediate layers too (multi-arch).
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           provenance: true
           # Do NOT push a buildkit inline SBOM attestation: on the FIRST push of a
           # new GHCR package it 403s while the package is being created. The SBOM is
@@ -76,14 +77,12 @@ jobs:
       # via the workflow OIDC token; verify with `gh attestation verify`. Replaces
       # the previous cosign step (same Sigstore-backed signing, GitHub-native).
       - name: Attest build provenance
-        if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
       - name: Generate SBOM (CycloneDX)
-        if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@a930d0ac434e3182448fe678398ba5713717112a # v0.21.0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
@@ -92,7 +91,6 @@ jobs:
           artifact-name: sbom-cyclonedx.json
       # Signed SBOM attestation pushed to the registry.
       - name: Attest SBOM
-        if: github.event_name != 'pull_request'
         uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
