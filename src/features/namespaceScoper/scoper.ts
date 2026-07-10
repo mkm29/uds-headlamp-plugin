@@ -130,7 +130,8 @@ function loadClusterSettings(clusterName: string): Record<string, any> {
     return {};
   }
   try {
-    return JSON.parse(localStorage.getItem(`cluster_settings.${clusterName}`) || '{}');
+    const parsed = JSON.parse(localStorage.getItem(`cluster_settings.${clusterName}`) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -285,9 +286,13 @@ export async function applyScope(): Promise<{
   }
 
   const result = await computeScope();
-  if (result.cluster !== cluster) {
+  // Re-read the active cluster AFTER the async probe phase. computeScope captured
+  // its cluster before probing, so comparing against result.cluster cannot detect a
+  // switch that happened DURING probing; re-reading currentCluster() here can.
+  const clusterAfterProbe = currentCluster();
+  if (clusterAfterProbe !== cluster) {
     log.warn(
-      `applyScope: active cluster changed during probe (was "${cluster}", now "${result.cluster}"); skipping write`
+      `applyScope: active cluster changed during probe (was "${cluster}", now "${clusterAfterProbe}"); skipping write`
     );
     return result;
   }
