@@ -19,7 +19,7 @@ import { Box, Typography } from '@mui/material';
 import { useUdsDetect } from '../../common/udsDetect';
 import { Package, PackageObject, packageStatus, phaseToStatus } from './resource';
 
-const { ResourceListView, StatusLabel } = CommonComponents;
+const { Link, ResourceListView, StatusLabel } = CommonComponents;
 
 /** Count helper: length of a status array field, 0 when absent. */
 function count(v: unknown): number {
@@ -42,7 +42,19 @@ export function PackagesList() {
       title="UDS Packages"
       resourceClass={Package}
       columns={[
-        'name',
+        {
+          id: 'name',
+          label: 'Name',
+          getValue: (pkg: PackageObject) => pkg.getName(),
+          render: (pkg: PackageObject) => (
+            <Link
+              routeName="uds-package-detail"
+              params={{ namespace: pkg.getNamespace() ?? '', name: pkg.getName() }}
+            >
+              {pkg.getName()}
+            </Link>
+          ),
+        },
         'namespace',
         {
           id: 'status',
