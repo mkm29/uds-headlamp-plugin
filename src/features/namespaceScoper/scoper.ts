@@ -26,7 +26,6 @@ const log = {
 
 const CONFIG_URL = './config.json';
 
-// @ts-ignore - import.meta requires esnext module; this is set at vite build time
 const BUILD_TIME_NAMESPACES: string =
   (import.meta as any).env?.HEADLAMP_APP_CANDIDATE_NAMESPACES || '';
 
