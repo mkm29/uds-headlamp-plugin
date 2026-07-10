@@ -63,7 +63,8 @@ Check out production-ready plugins in `node_modules/@kinvolk/headlamp-plugin/off
 
 - **keda** - Map view showing KEDA resource relationships
   - File: `official-plugins/keda/src/mapView.tsx`
-  - Uses edge creation (`makeKubeToKubeEdge`) to visualize connections between ScaledObjects, ScaledJobs, and TriggerAuthentications
+  - Uses edge creation (`makeKubeToKubeEdge`) to visualize connections between ScaledObjects, ScaledJobs, and
+    TriggerAuthentications
   - Shows how to build graph visualizations of resource dependencies
 
 #### Adding Metrics and Charts
@@ -127,12 +128,12 @@ Check out production-ready plugins in `node_modules/@kinvolk/headlamp-plugin/off
 ## Development Workflow
 
 1. **Start Development:** Run `npm start` to watch for changes
-2. **Make Changes:** Edit files in `src/`
-3. **Type Check:** Run `npm run tsc` to check for TypeScript errors
-4. **Lint:** Run `npm run lint` to check for code quality issues
-5. **Format:** Run `npm run format` to format code
-6. **Test:** Run `npm run test` to run tests
-7. **Build:** Run `npm run build` to create production build
+1. **Make Changes:** Edit files in `src/`
+1. **Type Check:** Run `npm run tsc` to check for TypeScript errors
+1. **Lint:** Run `npm run lint` to check for code quality issues
+1. **Format:** Run `npm run format` to format code
+1. **Test:** Run `npm run test` to run tests
+1. **Build:** Run `npm run build` to create production build
 
 ## Best Practices
 

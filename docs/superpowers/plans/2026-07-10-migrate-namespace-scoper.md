@@ -1,48 +1,69 @@
 # Namespace Scoper Migration Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Migrate the standalone `headlamp-namespace-scoper-plugin` into the `uds-core` plugin's `namespaceScoper` feature, driven by plugin settings and using SelfSubjectRulesReview-first probing.
+**Goal:** Migrate the standalone `headlamp-namespace-scoper-plugin` into the `uds-core` plugin's `namespaceScoper`
+feature, driven by plugin settings and using SelfSubjectRulesReview-first probing.
 
-**Architecture:** A background cluster watcher (started from the feature's one-shot `register()`) resolves candidate namespaces, probes each as the impersonated user (SelfSubjectRulesReview first, SelfSubjectAccessReview fallback), and writes the accessible set into Headlamp's per-cluster `allowedNamespaces` localStorage setting. Enable flag, probe attributes, and strategy are read live from the plugin ConfigStore, keyed per cluster.
+**Architecture:** A background cluster watcher (started from the feature's one-shot `register()`) resolves candidate
+namespaces, probes each as the impersonated user (SelfSubjectRulesReview first, SelfSubjectAccessReview fallback), and
+writes the accessible set into Headlamp's per-cluster `allowedNamespaces` localStorage setting. Enable flag, probe
+attributes, and strategy are read live from the plugin ConfigStore, keyed per cluster.
 
-**Tech Stack:** TypeScript, React + MUI (shared modules), `@kinvolk/headlamp-plugin` 0.14.0 (`ApiProxy`, `ConfigStore`), vitest.
+**Tech Stack:** TypeScript, React + MUI (shared modules), `@kinvolk/headlamp-plugin` 0.14.0 (`ApiProxy`, `ConfigStore`),
+vitest.
 
 ## Global Constraints
 
 - Package/plugin name is `uds-core`; ConfigStore key is `uds-core` (ADR-0002).
-- Do NOT bundle shared modules (React/MUI/lodash/recharts); import from `@mui/material` and `@kinvolk/headlamp-plugin/lib` only (ADR-0006).
-- Import ONLY from `@kinvolk/headlamp-plugin/lib` and `@kinvolk/headlamp-plugin/lib/Utils`-level public paths that are known safe. Do NOT import `getCluster`/`loadClusterSettings`/`storeClusterSettings` from deep submodules — they resolve to undefined globals in the deployed app and crash the whole plugin on load (documented in `headlamp-namespace-scoper-plugin/src/index.tsx` lines 7-16). Reimplement those three helpers directly.
+- Do NOT bundle shared modules (React/MUI/lodash/recharts); import from `@mui/material` and
+  `@kinvolk/headlamp-plugin/lib` only (ADR-0006).
+- Import ONLY from `@kinvolk/headlamp-plugin/lib` and `@kinvolk/headlamp-plugin/lib/Utils`-level public paths that are
+  known safe. Do NOT import `getCluster`/`loadClusterSettings`/`storeClusterSettings` from deep submodules — they
+  resolve to undefined globals in the deployed app and crash the whole plugin on load (documented in
+  `headlamp-namespace-scoper-plugin/src/index.tsx` lines 7-16). Reimplement those three helpers directly.
 - Registration is one-shot at load (ADR-0004): gate *behavior* on live config, do not conditionally skip registration.
-- `allowedNamespaces` is a Headlamp cluster setting stored at `localStorage['cluster_settings.<cluster>']` — NOT the plugin ConfigStore. Enable/probe/strategy settings live in the plugin ConfigStore.
+- `allowedNamespaces` is a Headlamp cluster setting stored at `localStorage['cluster_settings.<cluster>']` — NOT the
+  plugin ConfigStore. Enable/probe/strategy settings live in the plugin ConfigStore.
 - Fail-open: if zero namespaces are accessible, leave Headlamp's namespace filter UNTOUCHED (never lock the user out).
-- All four gates must pass before the feature is considered done: `npm run tsc`, `npm run lint`, `npm test`, `npm run build`.
-- Every commit message ends with the trailer:
-  `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
+- All four gates must pass before the feature is considered done: `npm run tsc`, `npm run lint`, `npm test`,
+  `npm run build`.
+- Every commit message ends with the trailer: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
 - Single-file test command (fast feedback):
   `npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs <file>`
 
----
+______________________________________________________________________
 
 ## Migration Notes (read before starting)
 
 **Source:** `headlamp-namespace-scoper-plugin/src/index.tsx` (single file, React-free, self-contained).
 
-**What is preserved verbatim:** URL-regex `getCluster`, direct-localStorage cluster settings, `SelfSubjectAccessReview` probe body, DNS-1123 namespace validation, config.json → build-time env → hardcoded candidate resolution, fail-open apply, the polling cluster watcher, and the `nsScoperDebug()`/`nsScoperApply()` console helpers.
+**What is preserved verbatim:** URL-regex `getCluster`, direct-localStorage cluster settings, `SelfSubjectAccessReview`
+probe body, DNS-1123 namespace validation, config.json → build-time env → hardcoded candidate resolution, fail-open
+apply, the polling cluster watcher, and the `nsScoperDebug()`/`nsScoperApply()` console helpers.
 
 **What is adapted for issue #1:**
-- Probe upgraded to **SelfSubjectRulesReview first** (one review returns all rules for a namespace), with **SelfSubjectAccessReview as fallback** when rules review is unavailable/errored.
-- Probe attributes (`verb`/`group`/`resource`/`subresource`) and **strategy** (`candidates` vs `list-all`) are read from the plugin **ConfigStore**, per cluster, instead of being hardcoded.
-- New `list-all` strategy lists namespaces via the API (best-effort) and **falls back to candidate resolution** when the user cannot list namespaces.
-- The watcher lives inside `namespaceScoperFeature.register()` and gates each apply on the **live per-cluster enable flag**.
+
+- Probe upgraded to **SelfSubjectRulesReview first** (one review returns all rules for a namespace), with
+  **SelfSubjectAccessReview as fallback** when rules review is unavailable/errored.
+- Probe attributes (`verb`/`group`/`resource`/`subresource`) and **strategy** (`candidates` vs `list-all`) are read from
+  the plugin **ConfigStore**, per cluster, instead of being hardcoded.
+- New `list-all` strategy lists namespaces via the API (best-effort) and **falls back to candidate resolution** when the
+  user cannot list namespaces.
+- The watcher lives inside `namespaceScoperFeature.register()` and gates each apply on the **live per-cluster enable
+  flag**.
 - Settings UI gains verb/group/resource/subresource inputs, a strategy selector, and a label selector.
 
 ## File Structure
 
-- Create `src/features/namespaceScoper/probe.ts` — PURE helpers: review body builders, `ruleAllows`, `isValidNamespace`, `parseCsv`, `computeAllowedFromProbes`, shared types. No Headlamp/DOM deps.
+- Create `src/features/namespaceScoper/probe.ts` — PURE helpers: review body builders, `ruleAllows`, `isValidNamespace`,
+  `parseCsv`, `computeAllowedFromProbes`, shared types. No Headlamp/DOM deps.
 - Create `src/features/namespaceScoper/probe.test.ts` — unit tests for the pure helpers.
-- Create `src/features/namespaceScoper/scoper.ts` — IMPURE orchestration: ApiProxy probes, namespace listing, candidate resolution, localStorage apply, cluster watcher.
-- Create `src/features/namespaceScoper/scoper.test.ts` — unit tests for `resolveCandidateNamespaces` (injected fetch) and `resolveNamespaces`.
+- Create `src/features/namespaceScoper/scoper.ts` — IMPURE orchestration: ApiProxy probes, namespace listing, candidate
+  resolution, localStorage apply, cluster watcher.
+- Create `src/features/namespaceScoper/scoper.test.ts` — unit tests for `resolveCandidateNamespaces` (injected fetch)
+  and `resolveNamespaces`.
 - Modify `src/features/namespaceScoper/index.ts` — real `register()` wiring + console helpers.
 - Modify `src/common/cluster.ts` — reimplement `currentCluster()` as URL regex (remove the unsafe Utils import).
 - Create `src/common/cluster.test.ts` — unit tests for the URL parser.
@@ -50,18 +71,22 @@
 - Modify `src/settings/flags.test.ts` — add scoper-config tests.
 - Modify `src/settings/Settings.tsx` — add the namespace-scoping settings sub-panel.
 
----
+______________________________________________________________________
 
 ### Task 1: Safe cluster resolution (URL regex)
 
-Replace the scaffold's `currentCluster()` (which imports `getCluster` from a submodule that crashes in the deployed app) with the proven URL-regex implementation. Same signature, so no callers change.
+Replace the scaffold's `currentCluster()` (which imports `getCluster` from a submodule that crashes in the deployed app)
+with the proven URL-regex implementation. Same signature, so no callers change.
 
 **Files:**
+
 - Modify: `src/common/cluster.ts`
 - Test: `src/common/cluster.test.ts`
 
 **Interfaces:**
-- Produces: `currentCluster(): string | null` (unchanged signature) and `getClusterFromPath(pathname: string): string | null` (new, pure, exported for testing).
+
+- Produces: `currentCluster(): string | null` (unchanged signature) and
+  `getClusterFromPath(pathname: string): string | null` (new, pure, exported for testing).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -153,8 +178,7 @@ Expected: PASS (4 tests).
 
 - [ ] **Step 5: Typecheck + lint**
 
-Run: `npm run tsc && npm run lint`
-Expected: both exit 0 (no unused-import error from the removed Utils import).
+Run: `npm run tsc && npm run lint` Expected: both exit 0 (no unused-import error from the removed Utils import).
 
 - [ ] **Step 6: Commit**
 
@@ -171,19 +195,24 @@ EOF
 )"
 ```
 
----
+______________________________________________________________________
 
 ### Task 2: Scoper settings model in flags.ts
 
-Add the per-cluster scoper configuration (probe attributes + strategy) to the plugin config, with pure getter/setter helpers.
+Add the per-cluster scoper configuration (probe attributes + strategy) to the plugin config, with pure getter/setter
+helpers.
 
 **Files:**
+
 - Modify: `src/settings/flags.ts`
 - Test: `src/settings/flags.test.ts`
 
 **Interfaces:**
+
 - Consumes: `UdsFlags`, `ClusterFlags`, `DEFAULT_FLAGS` (from Task's own file, existing).
+
 - Produces:
+
   - `type ProbeStrategy = 'candidates' | 'list-all'`
   - `interface ScoperConfig { verb: string; group: string; resource: string; subresource: string; strategy: ProbeStrategy; labelSelector: string }`
   - `const DEFAULT_SCOPER: ScoperConfig`
@@ -320,8 +349,7 @@ Expected: PASS (original 4 + new 4 = 8 tests).
 
 - [ ] **Step 5: Typecheck**
 
-Run: `npm run tsc`
-Expected: exit 0.
+Run: `npm run tsc` Expected: exit 0.
 
 - [ ] **Step 6: Commit**
 
@@ -338,18 +366,22 @@ EOF
 )"
 ```
 
----
+______________________________________________________________________
 
 ### Task 3: Pure probe module
 
-The heart of the "namespace-resolution logic (pure parts)" the issue requires under test: review-body builders, the RBAC rule matcher used to interpret a SelfSubjectRulesReview, namespace validation, and CSV parsing.
+The heart of the "namespace-resolution logic (pure parts)" the issue requires under test: review-body builders, the RBAC
+rule matcher used to interpret a SelfSubjectRulesReview, namespace validation, and CSV parsing.
 
 **Files:**
+
 - Create: `src/features/namespaceScoper/probe.ts`
 - Test: `src/features/namespaceScoper/probe.test.ts`
 
 **Interfaces:**
+
 - Produces:
+
   - `interface ResourceAttributes { verb: string; group: string; resource: string; subresource: string }`
   - `interface ResourceRule { verbs: string[]; apiGroups: string[]; resources: string[] }`
   - `interface ProbeResult { namespace: string; allowed: boolean; method: 'ssrr' | 'ssar'; reason?: string; evaluationError?: string; error?: string }`
@@ -486,7 +518,8 @@ describe('computeAllowedFromProbes', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/probe.test.ts`
+Run:
+`npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/probe.test.ts`
 Expected: FAIL — module `./probe` not found.
 
 - [ ] **Step 3: Create `src/features/namespaceScoper/probe.ts`**
@@ -610,13 +643,13 @@ export function computeAllowedFromProbes(probes: ProbeResult[]): string[] {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/probe.test.ts`
+Run:
+`npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/probe.test.ts`
 Expected: PASS (all describes).
 
 - [ ] **Step 5: Typecheck + lint**
 
-Run: `npm run tsc && npm run lint`
-Expected: exit 0.
+Run: `npm run tsc && npm run lint` Expected: exit 0.
 
 - [ ] **Step 6: Commit**
 
@@ -633,19 +666,24 @@ EOF
 )"
 ```
 
----
+______________________________________________________________________
 
 ### Task 4: Candidate namespace resolution
 
-Migrate the `config.json → build-time env → hardcoded fallback` resolution, refactored with injectable dependencies so it is testable, and add the `list-all` selection path.
+Migrate the `config.json → build-time env → hardcoded fallback` resolution, refactored with injectable dependencies so
+it is testable, and add the `list-all` selection path.
 
 **Files:**
+
 - Create: `src/features/namespaceScoper/scoper.ts` (partial — resolution functions only in this task)
 - Test: `src/features/namespaceScoper/scoper.test.ts`
 
 **Interfaces:**
+
 - Consumes: `parseCsv`, `isValidNamespace` (from `./probe`); `ProbeStrategy` (from `../../settings/flags`).
+
 - Produces:
+
   - `type CandidateSource = 'config.json' | 'build-time-env' | 'hardcoded-fallback'`
   - `const HARDCODED_FALLBACK: string[]`
   - `resolveCandidateNamespaces(deps?: { fetchImpl?: typeof fetch; buildTimeCsv?: string; hardcoded?: string[] }): Promise<{ source: CandidateSource; namespaces: string[] }>`
@@ -723,7 +761,8 @@ describe('resolveCandidateNamespaces', () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/scoper.test.ts`
+Run:
+`npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/scoper.test.ts`
 Expected: FAIL — module `./scoper` not found.
 
 - [ ] **Step 3: Create `src/features/namespaceScoper/scoper.ts` (resolution part)**
@@ -841,13 +880,13 @@ export async function resolveCandidateNamespaces(deps?: {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/scoper.test.ts`
+Run:
+`npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/scoper.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Typecheck + lint**
 
-Run: `npm run tsc && npm run lint`
-Expected: exit 0.
+Run: `npm run tsc && npm run lint` Expected: exit 0.
 
 - [ ] **Step 6: Commit**
 
@@ -864,18 +903,26 @@ EOF
 )"
 ```
 
----
+______________________________________________________________________
 
 ### Task 5: Impure probing, namespace listing, and apply
 
-Complete `scoper.ts` with the ApiProxy-backed probes (SSRR-first, SSAR fallback), the `list-all` namespace listing, cluster-settings load/store, `computeScope`/`applyScope`, and the cluster watcher.
+Complete `scoper.ts` with the ApiProxy-backed probes (SSRR-first, SSAR fallback), the `list-all` namespace listing,
+cluster-settings load/store, `computeScope`/`applyScope`, and the cluster watcher.
 
 **Files:**
+
 - Modify: `src/features/namespaceScoper/scoper.ts`
 
 **Interfaces:**
-- Consumes: `ApiProxy` (from `@kinvolk/headlamp-plugin/lib`); `currentCluster` (from `../../common/cluster`); `store` (from `../../settings/config`); `getScoperConfig`, `isFeatureEnabled`, `ScoperConfig` (from `../../settings/flags`); `ProbeResult`, `ResourceAttributes`, `ResourceRule`, `isValidNamespace`, `ruleAllows`, `selfSubjectAccessReviewBody`, `selfSubjectRulesReviewBody`, `computeAllowedFromProbes` (from `./probe`).
+
+- Consumes: `ApiProxy` (from `@kinvolk/headlamp-plugin/lib`); `currentCluster` (from `../../common/cluster`); `store`
+  (from `../../settings/config`); `getScoperConfig`, `isFeatureEnabled`, `ScoperConfig` (from `../../settings/flags`);
+  `ProbeResult`, `ResourceAttributes`, `ResourceRule`, `isValidNamespace`, `ruleAllows`, `selfSubjectAccessReviewBody`,
+  `selfSubjectRulesReviewBody`, `computeAllowedFromProbes` (from `./probe`).
+
 - Produces:
+
   - `probeNamespace(namespace: string, attrs: ResourceAttributes): Promise<ProbeResult>`
   - `computeScope(): Promise<{ cluster: string | null; allowed: string[]; probes: ProbeResult[] }>`
   - `applyScope(): Promise<{ cluster: string | null; allowed: string[]; probes: ProbeResult[] } | null>`
@@ -1120,13 +1167,15 @@ export function startClusterWatcher(): void {
 
 - [ ] **Step 2: Run the existing scoper tests to verify no regression**
 
-Run: `npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/scoper.test.ts`
+Run:
+`npx vitest run -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs src/features/namespaceScoper/scoper.test.ts`
 Expected: PASS (3 tests still green — resolution behavior unchanged).
 
 - [ ] **Step 3: Typecheck + lint**
 
-Run: `npm run tsc && npm run lint`
-Expected: exit 0. If lint flags `any`, keep it — the ApiProxy responses are untyped; the existing scaffold and source use `any` for these. If lint flags an unused `parseCsv` import after merging, remove the duplicate import line.
+Run: `npm run tsc && npm run lint` Expected: exit 0. If lint flags `any`, keep it — the ApiProxy responses are untyped;
+the existing scaffold and source use `any` for these. If lint flags an unused `parseCsv` import after merging, remove
+the duplicate import line.
 
 - [ ] **Step 4: Commit**
 
@@ -1144,17 +1193,20 @@ EOF
 )"
 ```
 
----
+______________________________________________________________________
 
 ### Task 6: Wire the feature register() + console helpers
 
 Replace the stubbed `register()` with real wiring: start the watcher and expose the debug/apply console helpers.
 
 **Files:**
+
 - Modify: `src/features/namespaceScoper/index.ts`
 
 **Interfaces:**
+
 - Consumes: `Feature` (from `../types`); `startClusterWatcher`, `computeScope`, `applyScope` (from `./scoper`).
+
 - Produces: `namespaceScoperFeature: Feature` (unchanged export name; manifest already imports it).
 
 - [ ] **Step 1: Replace the body of `src/features/namespaceScoper/index.ts` (below the license header)**
@@ -1199,13 +1251,11 @@ export const namespaceScoperFeature: Feature = {
 
 - [ ] **Step 2: Typecheck + lint + build**
 
-Run: `npm run tsc && npm run lint && npm run build`
-Expected: all exit 0; build prints `dist/main.js`.
+Run: `npm run tsc && npm run lint && npm run build` Expected: all exit 0; build prints `dist/main.js`.
 
 - [ ] **Step 3: Run the full test suite**
 
-Run: `CI=true npm test`
-Expected: all test files pass (cluster, flags, probe, scoper).
+Run: `CI=true npm test` Expected: all test files pass (cluster, flags, probe, scoper).
 
 - [ ] **Step 4: Commit**
 
@@ -1222,21 +1272,25 @@ EOF
 )"
 ```
 
----
+______________________________________________________________________
 
 ### Task 7: Settings UI for the scoper
 
-Add a "Namespace scoping" sub-panel to the settings page: verb/group/resource/subresource inputs, a strategy selector, and a label selector.
+Add a "Namespace scoping" sub-panel to the settings page: verb/group/resource/subresource inputs, a strategy selector,
+and a label selector.
 
 **Files:**
+
 - Modify: `src/settings/Settings.tsx`
 
 **Interfaces:**
+
 - Consumes: `getScoperConfig`, `setScoperConfig`, `ProbeStrategy` (from `./flags`).
 
 - [ ] **Step 1: Add imports**
 
-In `src/settings/Settings.tsx`, extend the flags import to include the scoper helpers and add `MenuItem` is already imported; add `ProbeStrategy` type import. Change the existing line:
+In `src/settings/Settings.tsx`, extend the flags import to include the scoper helpers and add `MenuItem` is already
+imported; add `ProbeStrategy` type import. Change the existing line:
 
 ```ts
 import { DEFAULT_FLAGS, isFeatureEnabled, setFeature, UdsFlags } from './flags';
@@ -1258,7 +1312,8 @@ import {
 
 - [ ] **Step 2: Add the scoper panel before the closing `</Box>` of the component**
 
-Insert this block immediately after the "Features" `</Box>` and before the `UDS operator namespace` `TextField` in `src/settings/Settings.tsx`:
+Insert this block immediately after the "Features" `</Box>` and before the `UDS operator namespace` `TextField` in
+`src/settings/Settings.tsx`:
 
 ```tsx
       <Box>
@@ -1328,8 +1383,7 @@ Insert this block immediately after the "Features" `</Box>` and before the `UDS 
 
 - [ ] **Step 3: Typecheck + lint + build**
 
-Run: `npm run tsc && npm run lint && npm run build`
-Expected: all exit 0.
+Run: `npm run tsc && npm run lint && npm run build` Expected: all exit 0.
 
 - [ ] **Step 4: Commit**
 
@@ -1346,7 +1400,7 @@ EOF
 )"
 ```
 
----
+______________________________________________________________________
 
 ### Task 8: Acceptance verification & manual runtime check
 
@@ -1357,29 +1411,45 @@ Confirm every issue #1 acceptance criterion, run all four gates together, and re
 - [ ] **Step 1: Run all four gates**
 
 Run:
+
 ```bash
 npm run tsc && npm run lint && CI=true npm test && npm run build
 ```
+
 Expected: all exit 0; `dist/main.js` emitted; all test files green.
 
 - [ ] **Step 2: Manual runtime verification (documented, not automated)**
 
-Because scoping only observably works in a live Headlamp + OpenUnison deployment, verify manually and paste the console output into the PR:
+Because scoping only observably works in a live Headlamp + OpenUnison deployment, verify manually and paste the console
+output into the PR:
+
 1. Load the built plugin, log in via OpenUnison, open a cluster view (`/c/<cluster>/...`).
-2. In the browser console, filter on `uds-core:namespace-scoper`. Confirm a line like `active cluster is now "<cluster>"; applying namespace scope` and an `accessible namespaces (N/M)` summary.
-3. Run `udsScoperDebug()` — confirm the table shows `method` = `ssrr` for namespaces where the rules review succeeded, and `ssar` only where it fell back.
-4. Confirm Headlamp's namespace filter now lists only accessible namespaces (`localStorage['cluster_settings.<cluster>'].allowedNamespaces` is populated).
-5. In Settings > Plugins > uds-core, toggle "RBAC namespace scoping" off for the cluster, Save, reload; confirm the console logs `scoping disabled for cluster ...; skipping` and no new scope is applied.
-6. As a restricted user, confirm only their namespaces appear and no uncaught errors are logged.
+1. In the browser console, filter on `uds-core:namespace-scoper`. Confirm a line like
+   `active cluster is now "<cluster>"; applying namespace scope` and an `accessible namespaces (N/M)` summary.
+1. Run `udsScoperDebug()` — confirm the table shows `method` = `ssrr` for namespaces where the rules review succeeded,
+   and `ssar` only where it fell back.
+1. Confirm Headlamp's namespace filter now lists only accessible namespaces
+   (`localStorage['cluster_settings.<cluster>'].allowedNamespaces` is populated).
+1. In Settings > Plugins > uds-core, toggle "RBAC namespace scoping" off for the cluster, Save, reload; confirm the
+   console logs `scoping disabled for cluster ...; skipping` and no new scope is applied.
+1. As a restricted user, confirm only their namespaces appear and no uncaught errors are logged.
 
 - [ ] **Step 3: Map each acceptance criterion to evidence**
 
 Confirm and check off in issue #1:
+
 - [ ] `register()` populates `allowedNamespaces` under impersonation — Task 5/6 + manual step 4.
+
 - [ ] Toggling off per cluster disables on reload — `applyScope` enable gate (Task 5) + manual step 5.
-- [ ] Restricted RBAC → only accessible namespaces, no errors — per-probe try/catch + fail-open (Task 5) + manual step 6.
-- [ ] SSRR-first with SSAR fallback — `probeNamespace` (Task 5), verified by `method` column (manual step 3), unit-tested matcher (Task 3).
+
+- [ ] Restricted RBAC → only accessible namespaces, no errors — per-probe try/catch + fail-open (Task 5) + manual step
+  6\.
+
+- [ ] SSRR-first with SSAR fallback — `probeNamespace` (Task 5), verified by `method` column (manual step 3),
+  unit-tested matcher (Task 3).
+
 - [ ] tsc/lint/test/build pass — Step 1.
+
 - [ ] Unit tests cover namespace-resolution logic — Tasks 1-4 (`cluster`, `flags`, `probe`, `scoper` tests).
 
 - [ ] **Step 4: Push the branch and open the PR**
@@ -1393,11 +1463,12 @@ gh pr create --fill --base main \
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 ```
 
----
+______________________________________________________________________
 
 ## Self-Review
 
 **Spec coverage (issue #1 acceptance criteria):**
+
 - `register()` populates `allowedNamespaces` under impersonation → Tasks 5, 6. ✓
 - Toggle off per cluster disables on reload → Task 5 (`applyScope` enable gate). ✓
 - Restricted RBAC → accessible-only, no errors → Task 5 (per-probe try/catch, fail-open). ✓
@@ -1406,8 +1477,14 @@ gh pr create --fill --base main \
 - Unit tests for resolution logic → Tasks 1-4. ✓
 - Settings: verb/resource + strategy → Tasks 2, 7. ✓
 
-**Decommission note:** the standalone `headlamp-namespace-scoper-plugin/` directory is left in place (untracked) as reference during migration; deleting it is out of scope for issue #1 and should be a separate cleanup once the migrated feature is verified in a live cluster.
+**Decommission note:** the standalone `headlamp-namespace-scoper-plugin/` directory is left in place (untracked) as
+reference during migration; deleting it is out of scope for issue #1 and should be a separate cleanup once the migrated
+feature is verified in a live cluster.
 
-**Type consistency:** `ScoperConfig` fields (`verb/group/resource/subresource/strategy/labelSelector`) are used identically in `flags.ts` (Task 2), `scoper.ts` (Task 5), and `Settings.tsx` (Task 7). `ProbeResult.method` (`'ssrr' | 'ssar'`) is set in Task 5 and read in Task 6's console table. `currentCluster()` signature is unchanged across Task 1. `resolveCandidateNamespaces` deps object matches between Task 4 (definition/tests) and Task 5 (call with no args).
+**Type consistency:** `ScoperConfig` fields (`verb/group/resource/subresource/strategy/labelSelector`) are used
+identically in `flags.ts` (Task 2), `scoper.ts` (Task 5), and `Settings.tsx` (Task 7). `ProbeResult.method`
+(`'ssrr' | 'ssar'`) is set in Task 5 and read in Task 6's console table. `currentCluster()` signature is unchanged
+across Task 1. `resolveCandidateNamespaces` deps object matches between Task 4 (definition/tests) and Task 5 (call with
+no args).
 
 **Placeholder scan:** no TBD/TODO-as-work in task steps; all code blocks are complete.
