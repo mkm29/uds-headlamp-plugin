@@ -1,5 +1,8 @@
 ARG CANDIDATE_NAMESPACES
 FROM oven/bun:canary-debian@sha256:88ad267b0bb9d10cfcce12338a2020361405885f2deca6b0099cd213f6347124 AS builder
+# Re-declare the global ARG so it is in scope inside this stage; without this,
+# $CANDIDATE_NAMESPACES below expands to empty and the build-arg is silently ignored.
+ARG CANDIDATE_NAMESPACES
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN bun install --frozen-lockfile
@@ -7,6 +10,8 @@ COPY src ./src
 RUN HEADLAMP_APP_CANDIDATE_NAMESPACES=$CANDIDATE_NAMESPACES bun run build
 
 FROM busybox@sha256:1487d0af5f52b4ba31c7e465126ee2123fe3f2305d638e7827681e7cf6c83d5e AS final
+# Re-declare the global ARG so the ENV below resolves it (fixes buildkit UndefinedVar).
+ARG CANDIDATE_NAMESPACES
 RUN mkdir -p /plugins/uds-headlamp-plugin
 ENV HEADLAMP_APP_CANDIDATE_NAMESPACES=$CANDIDATE_NAMESPACES
 COPY --from=builder --chown=1001:1001 /src/dist/* /plugins/uds-headlamp-plugin
