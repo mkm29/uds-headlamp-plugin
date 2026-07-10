@@ -29,6 +29,8 @@ export interface ClusterFlags {
   features: { [featureId: string]: boolean };
   /** Optional service address (e.g. UDS operator namespace/service). */
   serviceAddress?: string;
+  /** Namespace-scoper probe configuration (feature 1). */
+  scoper?: ScoperConfig;
 }
 
 /**
@@ -85,6 +87,62 @@ export function setFeature(
         ...clusterFlags,
         features: { ...clusterFlags.features, [id]: enabled },
       },
+    },
+  };
+}
+
+/** How the scoper decides which namespaces to probe. */
+export type ProbeStrategy = 'candidates' | 'list-all';
+
+/**
+ * Namespace-scoper probe configuration. Defines the access check used as the
+ * "can this user work here?" signal, and how the candidate namespace set is
+ * chosen.
+ */
+export interface ScoperConfig {
+  /** Verb to test, e.g. 'get'. */
+  verb: string;
+  /** API group of the resource ('' for the core group). */
+  group: string;
+  /** Resource to test, e.g. 'pods'. */
+  resource: string;
+  /** Optional subresource, e.g. 'log' ('' for none). */
+  subresource: string;
+  /** 'candidates' probes a curated list; 'list-all' lists namespaces first. */
+  strategy: ProbeStrategy;
+  /** Label selector applied to the 'list-all' strategy ('' = no filter). */
+  labelSelector: string;
+}
+
+/** Defaults matching the migrated scoper's original probe ("get pods/log"). */
+export const DEFAULT_SCOPER: ScoperConfig = {
+  verb: 'get',
+  group: '',
+  resource: 'pods',
+  subresource: 'log',
+  strategy: 'candidates',
+  labelSelector: '',
+};
+
+/** Resolve the scoper config for a cluster, merged over the defaults. */
+export function getScoperConfig(cfg: UdsFlags | undefined, cluster: string): ScoperConfig {
+  return { ...DEFAULT_SCOPER, ...(cfg?.clusters?.[cluster]?.scoper ?? {}) };
+}
+
+/** Return new UdsFlags with a partial scoper patch applied for one cluster. Immutable. */
+export function setScoperConfig(
+  cfg: UdsFlags | undefined,
+  cluster: string,
+  patch: Partial<ScoperConfig>
+): UdsFlags {
+  const base = cfg ?? DEFAULT_FLAGS;
+  const clusterFlags = base.clusters?.[cluster] ?? { features: {} };
+  const scoper = { ...DEFAULT_SCOPER, ...(clusterFlags.scoper ?? {}), ...patch };
+  return {
+    ...base,
+    clusters: {
+      ...base.clusters,
+      [cluster]: { ...clusterFlags, scoper },
     },
   };
 }
