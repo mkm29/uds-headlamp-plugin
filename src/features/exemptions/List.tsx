@@ -19,7 +19,7 @@ import { Box, Typography } from '@mui/material';
 import { useUdsDetect } from '../../common/udsDetect';
 import { countExemptions, distinctPolicies, Exemption, ExemptionObject, exemptionSpec } from './resource';
 
-const { ResourceListView } = CommonComponents;
+const { ResourceListView, Link } = CommonComponents;
 
 export function ExemptionsList() {
   const { hasUds } = useUdsDetect();
@@ -37,7 +37,22 @@ export function ExemptionsList() {
       title="UDS Exemptions"
       resourceClass={Exemption}
       columns={[
-        'name',
+        // makeCustomResourceClass leaves detailsRoute defaulting to the kind
+        // ('Exemption'), which doesn't match our route name, so the built-in
+        // 'name' column's link resolves to ''. Link explicitly to our route.
+        {
+          id: 'name',
+          label: 'Name',
+          getValue: (ex: ExemptionObject) => ex.getName(),
+          render: (ex: ExemptionObject) => (
+            <Link
+              routeName="uds-exemption-detail"
+              params={{ namespace: ex.getNamespace() ?? '', name: ex.getName() }}
+            >
+              {ex.getName()}
+            </Link>
+          ),
+        },
         'namespace',
         {
           id: 'exemptions',
