@@ -27,8 +27,8 @@ jobs:
     permissions:
       contents: read
       packages: write # push to GHCR
-      id-token: write # cosign keyless (OIDC) signing
-      attestations: write
+      id-token: write # GitHub artifact attestations (OIDC, keyless signing)
+      attestations: write # write build-provenance + SBOM attestations
     steps:
       - uses: actions/checkout@v4
 
@@ -74,21 +74,38 @@ jobs:
             CANDIDATE_NAMESPACES=
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # SBOM + provenance attestations (buildkit/Syft) attached to the image
-          # in-registry — satisfies ADR-0006's SBOM requirement.
-          sbom: true
-          provenance: mode=max
+          provenance: true
+          # Do NOT push a buildkit inline SBOM attestation: on the FIRST push of a
+          # new GHCR package it 403s while the package is being created. The SBOM is
+          # generated and attested separately below, after the image exists.
+          sbom: false
 
-      - name: Install cosign
+      # Signed SLSA build-provenance attestation pushed to the registry. Keyless
+      # via the workflow OIDC token; verify with `gh attestation verify`. Replaces
+      # the previous cosign step (same Sigstore-backed signing, GitHub-native).
+      - name: Attest build provenance
         if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@v3
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
-      # Sign the pushed image by digest (covers every tag and both platforms of
-      # the multi-arch index). Keyless: identity comes from the workflow's OIDC
-      # token, signature + cert logged to the Rekor transparency log.
-      - name: Sign image (keyless)
+      - name: Generate SBOM (CycloneDX)
         if: github.event_name != 'pull_request'
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom-cyclonedx.json
+          artifact-name: sbom-cyclonedx.json
+
+      # Signed SBOM attestation pushed to the registry.
+      - name: Attest SBOM
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-sbom@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: sbom-cyclonedx.json
+          push-to-registry: true
