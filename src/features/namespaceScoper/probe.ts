@@ -92,6 +92,22 @@ export function ruleAllows(rules: ResourceRule[], attrs: ResourceAttributes): bo
   );
 }
 
+/**
+ * Should a SelfSubjectRulesReview response be trusted, versus falling back to a
+ * SelfSubjectAccessReview? True only when the review completed without an
+ * evaluation error AND returned at least one rule.
+ */
+export function ssrrConclusive(status: {
+  evaluationError?: string;
+  resourceRules?: ResourceRule[];
+}): boolean {
+  return (
+    !status?.evaluationError &&
+    Array.isArray(status?.resourceRules) &&
+    status.resourceRules.length > 0
+  );
+}
+
 // DNS-1123 label validation (from Headlamp's isValidNamespaceFormat).
 const DNS1123 = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 

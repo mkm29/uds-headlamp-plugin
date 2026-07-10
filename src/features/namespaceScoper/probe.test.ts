@@ -23,6 +23,7 @@ import {
   ruleAllows,
   selfSubjectAccessReviewBody,
   selfSubjectRulesReviewBody,
+  ssrrConclusive,
 } from './probe';
 
 const ATTRS = { verb: 'get', group: '', resource: 'pods', subresource: 'log' };
@@ -113,5 +114,30 @@ describe('computeAllowedFromProbes', () => {
       { namespace: 'c', allowed: true, method: 'ssar' },
     ];
     expect(computeAllowedFromProbes(probes)).toEqual(['a', 'c']);
+  });
+});
+
+describe('ssrrConclusive', () => {
+  it('is true when rules are present and there is no evaluationError', () => {
+    expect(
+      ssrrConclusive({ resourceRules: [{ verbs: ['get'], apiGroups: [''], resources: ['pods'] }] })
+    ).toBe(true);
+  });
+
+  it('is false when the rule set is empty', () => {
+    expect(ssrrConclusive({ resourceRules: [] })).toBe(false);
+  });
+
+  it('is false when an evaluationError is present, even with rules', () => {
+    expect(
+      ssrrConclusive({
+        evaluationError: 'boom',
+        resourceRules: [{ verbs: ['get'], apiGroups: [''], resources: ['pods'] }],
+      })
+    ).toBe(false);
+  });
+
+  it('is false for an empty status object', () => {
+    expect(ssrrConclusive({})).toBe(false);
   });
 });

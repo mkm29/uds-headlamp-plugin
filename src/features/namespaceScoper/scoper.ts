@@ -28,6 +28,7 @@ import {
   ruleAllows,
   selfSubjectAccessReviewBody,
   selfSubjectRulesReviewBody,
+  ssrrConclusive,
 } from './probe';
 
 const PREFIX = '[uds-core:namespace-scoper]';
@@ -164,15 +165,11 @@ export async function probeNamespace(
       }
     );
     const status = res?.status || {};
-    const rules: ResourceRule[] = Array.isArray(status.resourceRules)
-      ? status.resourceRules
-      : [];
-    if (!status.evaluationError && rules.length > 0) {
+    if (ssrrConclusive(status)) {
       return {
         namespace,
-        allowed: ruleAllows(rules, attrs),
+        allowed: ruleAllows(status.resourceRules as ResourceRule[], attrs),
         method: 'ssrr',
-        evaluationError: status.evaluationError || undefined,
       };
     }
     // Empty rules or an evaluation error -> fall through to SSAR.
@@ -288,6 +285,12 @@ export async function applyScope(): Promise<{
   }
 
   const result = await computeScope();
+  if (result.cluster !== cluster) {
+    log.warn(
+      `applyScope: active cluster changed during probe (was "${cluster}", now "${result.cluster}"); skipping write`
+    );
+    return result;
+  }
   if (result.allowed.length === 0) {
     log.warn(
       'applyScope: NO accessible namespaces; leaving the namespace filter UNTOUCHED (fail-open)'
