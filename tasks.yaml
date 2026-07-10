@@ -1,0 +1,27 @@
+# Copyright 2024 Defense Unicorns
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Defense-Unicorns-Commercial
+# yaml-language-server: $schema=https://raw.githubusercontent.com/defenseunicorns/uds-cli/refs/heads/main/tasks.schema.json
+
+tasks:
+  - name: get-version
+    description: 'Get the version of the uds-headlamp-plugin plugin.'
+    actions:
+      - description: 'Read the version from package.json'
+        cmd: uds zarf tools yq '.version' package.json | tr -d '"'
+        setVariables:
+          - name: PLUGIN_VERSION
+
+  - name: build-image
+    description: "Inline the cluster's namespaces into the plugin at build time, then save the image as an OCI-archive tarball for Zarf imageArchives."
+    actions:
+      - task: get-version
+      - description: 'Best-effort: query cluster namespaces -> CANDIDATE_NAMESPACES (empty if no cluster; plugin falls back at runtime)'
+        cmd: uds zarf tools kubectl get ns -o json 2>/dev/null | uds zarf tools yq '[.items[]?.metadata.name] | join(",")' 2>/dev/null || echo ""
+        setVariables:
+          - name: CANDIDATE_NAMESPACES
+      # Build with podman and save as an OCI-archive
+      - description: 'Build the plugin image with podman, inlining namespaces via build-arg'
+        cmd: >
+          podman build --build-arg CANDIDATE_NAMESPACES="${CANDIDATE_NAMESPACES}" -t uds.internal/uds-headlamp-plugin-plugin:${PLUGIN_VERSION} .
+      - description: 'Save the image as an OCI-archive tarball'
+        cmd: podman save --format oci-archive -o ./build/uds-headlamp-plugin.tar uds.internal/uds-headlamp-plugin-plugin:${PLUGIN_VERSION}
