@@ -19,6 +19,7 @@ import { currentCluster } from '../../common/cluster';
 import { store } from '../../settings/config';
 import { DEFAULT_FLAGS, isFeatureEnabled } from '../../settings/flags';
 import { Feature } from '../types';
+import { PackageDetail } from './Detail';
 import { PackagesList } from './List';
 
 const FEATURE_ID = 'packages';
@@ -59,6 +60,13 @@ export const packagesFeature: Feature = {
       name: 'uds-packages',
       exact: true,
       component: () => <PackagesList />,
+    });
+    registerRoute({
+      path: '/uds-core/packages/:namespace/:name',
+      sidebar: 'uds-packages',
+      name: 'uds-package-detail',
+      exact: true,
+      component: () => <PackageDetail />,
     });
 
     // Hide the UDS Core sidebar tree when the feature is toggled off (live).
