@@ -65,8 +65,13 @@ jobs:
           # Cluster-specific inlining stays a deploy-time concern (see tasks.yaml).
           build-args: |
             CANDIDATE_NAMESPACES=
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Per-ref scope stops concurrent branches from evicting each other's
+          # GHA cache; also read from the develop scope so a fresh branch/PR
+          # starts warm. mode=max caches intermediate layers too (multi-arch).
+          cache-from: |
+            type=gha,scope=uds-headlamp-${{ github.ref_name }}
+            type=gha,scope=uds-headlamp-develop
+          cache-to: type=gha,mode=max,scope=uds-headlamp-${{ github.ref_name }}
           provenance: true
           # Do NOT push a buildkit inline SBOM attestation: on the FIRST push of a
           # new GHCR package it 403s while the package is being created. The SBOM is
