@@ -14,19 +14,24 @@
  * limitations under the License.
  */
 
-import { registerAppBarAction } from '@kinvolk/headlamp-plugin/lib';
+import { registerPluginSettings } from '@kinvolk/headlamp-plugin/lib';
+import { currentCluster } from './common/cluster';
+import { FEATURES } from './features/manifest';
+import { store } from './settings/config';
+import { DEFAULT_FLAGS, isFeatureEnabled } from './settings/flags';
+import { Settings } from './settings/Settings';
 
-// Below are some imports you may want to use.
-//   See README.md for links to plugin development documentation.
-// import { Headlamp, K8s, useTranslation } from '@kinvolk/headlamp-plugin/lib';
-// import { SectionBox } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
-// import { K8s } from '@kinvolk/headlamp-plugin/lib/K8s';
-// import { Typography } from '@mui/material';
+// Register the unified settings page with Headlamp's Save button (ADR-0005).
+registerPluginSettings('uds-core', Settings, true);
 
-registerAppBarAction(<span>Hello</span>);
+// Registration is one-shot at load (ADR-0004): read a snapshot of the flags and
+// let each feature register itself. Features register unconditionally and gate
+// their own visibility with live filters/guards, so a disabled feature is
+// hidden rather than skipped here.
+const flags = store.get() ?? DEFAULT_FLAGS;
+const cluster = currentCluster() ?? '';
 
-// Example of using i18n (internationalization):
-// function MyComponent() {
-//   const { t } = useTranslation();
-//   return <div>{t('translation_key')}</div>;
-// }
+for (const feature of FEATURES) {
+  const enabled = isFeatureEnabled(flags, cluster, feature.id, feature.defaultEnabled);
+  feature.register({ enabled });
+}

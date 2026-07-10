@@ -1,7 +1,7 @@
 {
-  "name": "uds-headlamp-plugin",
+  "name": "uds-core",
   "version": "0.1.0",
-  "description": "Your Headlamp plugin",
+  "description": "UDS Core Headlamp plugin",
   "scripts": {
     "start": "headlamp-plugin start",
     "build": "headlamp-plugin build",
