@@ -58,5 +58,16 @@ describe('distinctPolicies', () => {
       'RestrictVolumeTypes',
     ]);
   });
+  it('sorts alphabetically regardless of insertion order', () => {
+    // Insertion order here (RestrictVolumeTypes, DisallowPrivileged) is the
+    // reverse of the sorted order, so this fails if `.sort()` is ever dropped.
+    const unordered: ExemptionSpec = {
+      exemptions: [
+        { matcher: { name: 'z', namespace: 'ns' }, policies: ['RestrictVolumeTypes'] },
+        { matcher: { name: 'a', namespace: 'ns' }, policies: ['DisallowPrivileged'] },
+      ],
+    };
+    expect(distinctPolicies(unordered)).toEqual(['DisallowPrivileged', 'RestrictVolumeTypes']);
+  });
   it('is [] for undefined', () => expect(distinctPolicies(undefined)).toEqual([]));
 });
