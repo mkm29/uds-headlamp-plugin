@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { K8s } from '@kinvolk/headlamp-plugin/lib';
+
 /** Result of UDS Core detection. */
 export interface UdsDetectResult {
   /** True when the uds.dev CRD group is present in the cluster. */
@@ -22,16 +24,28 @@ export interface UdsDetectResult {
   groups: Set<string>;
 }
 
+/** The CRD API group shared by Packages, Exemptions, and ClusterConfig. */
+export const UDS_GROUP = 'uds.dev';
+
+/** Pure: reduce a CRD list to the set of API groups present. Null-safe (RBAC-denied). */
+export function udsGroupsFromCrds(crds: Array<{ spec?: { group?: string } }> | null): Set<string> {
+  const groups = new Set<string>();
+  for (const c of crds ?? []) {
+    const g = c?.spec?.group;
+    if (g) {
+      groups.add(g);
+    }
+  }
+  return groups;
+}
+
 /**
- * Detect whether UDS Core is installed in the current cluster.
- *
- * Scaffold placeholder: returns "not detected" so callers can wire UI now.
- *
- * TODO(phase-2): query CustomResourceDefinition.useList() for the `uds.dev`
- * group and look up the pepr-uds-core deployment. Reads are impersonated, so a
- * user lacking `list customresourcedefinitions` degrades to "unknown" → treat
- * as hidden (ADR-0004).
+ * Detect whether UDS Core is installed in the current cluster. Reads are
+ * impersonated, so a user lacking `list customresourcedefinitions` gets an
+ * empty list -> hasUds:false ("unknown" treated as "not detected", ADR-0004).
  */
 export function useUdsDetect(): UdsDetectResult {
-  return { hasUds: false, groups: new Set<string>() };
+  const [crds] = K8s.ResourceClasses.CustomResourceDefinition.useList();
+  const groups = udsGroupsFromCrds(crds as Array<{ spec?: { group?: string } }> | null);
+  return { hasUds: groups.has(UDS_GROUP), groups };
 }
