@@ -17,7 +17,7 @@
 import { CommonComponents } from '@kinvolk/headlamp-plugin/lib';
 import { Box, Typography } from '@mui/material';
 import { useUdsDetect } from '../../common/udsDetect';
-import { Package, phaseToStatus } from './resource';
+import { Package, PackageObject, packageStatus, phaseToStatus } from './resource';
 
 const { ResourceListView, StatusLabel } = CommonComponents;
 
@@ -47,22 +47,42 @@ export function PackagesList() {
         {
           id: 'status',
           label: 'Status',
-          getValue: (pkg: any) => pkg.status?.phase ?? '',
-          render: (pkg: any) => (
-            <StatusLabel status={phaseToStatus(pkg.status?.phase)}>
-              {pkg.status?.phase ?? 'Unknown'}
+          getValue: (pkg: PackageObject) => packageStatus(pkg)?.phase ?? '',
+          render: (pkg: PackageObject) => (
+            <StatusLabel status={phaseToStatus(packageStatus(pkg)?.phase)}>
+              {packageStatus(pkg)?.phase ?? 'Unknown'}
             </StatusLabel>
           ),
         },
-        { id: 'sso', label: 'SSO Clients', getValue: (pkg: any) => count(pkg.status?.ssoClients) },
-        { id: 'endpoints', label: 'Endpoints', getValue: (pkg: any) => count(pkg.status?.endpoints) },
-        { id: 'monitors', label: 'Monitors', getValue: (pkg: any) => count(pkg.status?.monitors) },
-        { id: 'probes', label: 'Probes', getValue: (pkg: any) => count(pkg.status?.probes) },
-        { id: 'netpol', label: 'Network Policies', getValue: (pkg: any) => pkg.status?.networkPolicyCount ?? 0 },
+        {
+          id: 'sso',
+          label: 'SSO Clients',
+          getValue: (pkg: PackageObject) => count(packageStatus(pkg)?.ssoClients),
+        },
+        {
+          id: 'endpoints',
+          label: 'Endpoints',
+          getValue: (pkg: PackageObject) => count(packageStatus(pkg)?.endpoints),
+        },
+        {
+          id: 'monitors',
+          label: 'Monitors',
+          getValue: (pkg: PackageObject) => count(packageStatus(pkg)?.monitors),
+        },
+        {
+          id: 'probes',
+          label: 'Probes',
+          getValue: (pkg: PackageObject) => count(packageStatus(pkg)?.probes),
+        },
+        {
+          id: 'netpol',
+          label: 'Network Policies',
+          getValue: (pkg: PackageObject) => packageStatus(pkg)?.networkPolicyCount ?? 0,
+        },
         {
           id: 'authpol',
           label: 'Authorization Policies',
-          getValue: (pkg: any) => pkg.status?.authorizationPolicyCount ?? 0,
+          getValue: (pkg: PackageObject) => packageStatus(pkg)?.authorizationPolicyCount ?? 0,
         },
         'age',
       ]}
