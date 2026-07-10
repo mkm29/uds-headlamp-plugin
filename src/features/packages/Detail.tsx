@@ -19,6 +19,7 @@ import { Box, Typography } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import {
   AllowRule,
+  AuthserviceClient,
   ExposeEntry,
   MonitorEntry,
   Package,
@@ -86,10 +87,10 @@ export function PackageDetail() {
                 <SimpleTable
                   emptyMessage="None"
                   columns={[
-                    { label: 'Client ID', getter: (c: { clientId: string }) => c.clientId },
+                    { label: 'Client ID', getter: (c: AuthserviceClient) => c.clientId },
                     {
                       label: 'Selector',
-                      getter: (c: { selector?: Record<string, string> }) =>
+                      getter: (c: AuthserviceClient) =>
                         Object.entries(c.selector ?? {}).map(([k, v]) => `${k}=${v}`).join(', ') || '-',
                     },
                   ]}
