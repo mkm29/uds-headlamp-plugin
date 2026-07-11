@@ -3,3 +3,5 @@ dist/
 .vscode
 build/
 .superpowers
+coverage/
+test-results/
