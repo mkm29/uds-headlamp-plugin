@@ -27,7 +27,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { currentCluster } from '../common/cluster';
-import { useUdsDetect } from '../common/udsDetect';
+import { UDS_CRDS, usePeprDetected, useUdsDetect } from '../common/udsDetect';
 import { FEATURES } from '../features/manifest';
 import {
   DEFAULT_FLAGS,
@@ -60,6 +60,8 @@ export function Settings(props: PluginSettingsDetailsProps) {
   );
 
   const detect = useUdsDetect();
+  const pepr = usePeprDetected();
+  const [showReport, setShowReport] = useState(false);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 640 }}>
@@ -189,14 +191,27 @@ export function Settings(props: PluginSettingsDetailsProps) {
       />
 
       <Box>
-        <Button variant="outlined" onClick={() => undefined}>
+        <Button variant="outlined" onClick={() => setShowReport(true)}>
           Test / Detect UDS Core
         </Button>
         <Typography variant="body2" sx={{ mt: 1 }}>
-          {detect.hasUds
-            ? 'UDS Core detected.'
-            : 'UDS Core not detected (scaffold placeholder).'}
+          {detect.hasUds ? 'UDS Core detected.' : 'UDS Core not detected.'}
         </Typography>
+        {showReport && (
+          <Box sx={{ mt: 1 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Detection details
+            </Typography>
+            {UDS_CRDS.map(name => (
+              <Typography key={name} variant="body2">
+                {name}: {detect.crdNames.has(name) ? 'found' : 'missing'}
+              </Typography>
+            ))}
+            <Typography variant="body2">
+              Pepr policy engine (pepr-uds-core): {pepr ? 'found' : 'missing'}
+            </Typography>
+          </Box>
+        )}
       </Box>
     </Box>
   );
