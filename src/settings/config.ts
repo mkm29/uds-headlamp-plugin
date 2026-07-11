@@ -22,9 +22,3 @@ import { UdsFlags } from './flags';
  * (ADR-0002). All per-cluster, per-feature state lives inside this one blob.
  */
 export const store = new ConfigStore<UdsFlags>('uds-core');
-
-/**
- * Reactive hook for reading config in components. Consumer components use this
- * so that live toggles hide/show content without a page reload (ADR-0004).
- */
-export const useUdsConfig = store.useConfig();

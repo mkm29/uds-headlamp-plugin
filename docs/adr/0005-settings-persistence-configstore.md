@@ -55,8 +55,9 @@ Settings UI (mirroring Prometheus):
    webhook were found. (Current state: the button is a scaffold no-op; the panel instead reports detection reactively
    from the `useUdsDetect()` hook. Wiring the button to an explicit probe + CRD/webhook report is pending.)
 
-Cross-component config access uses the `useUdsConfig` hook from the store. If prop drilling becomes a problem we may
-adopt `use-between` (as Prometheus does) to share the hook; we do not add it pre-emptively.
+Cross-component config access uses the settings component's `data`/`onDataChange` props and synchronous `store.get()`
+reads (e.g. in the sidebar owner). A reactive `useUdsConfig` hook was removed in issue #28 as unused; if prop drilling
+or live cross-component reactivity becomes a problem we can re-add it (and/or `use-between`, as Prometheus does).
 
 ## Consequences
 
