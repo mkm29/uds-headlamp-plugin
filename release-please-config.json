@@ -3,7 +3,7 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "uds-core",
+      "package-name": "@mkm29/uds-headlamp-plugin",
       "changelog-path": "CHANGELOG.md",
       "include-v-in-tag": true
     }

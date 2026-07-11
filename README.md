@@ -25,14 +25,28 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
   `CHANGELOG.md` and bumps the version in `package.json` (`fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE`
   → major).
 - Merging the release PR creates a GitHub Release and a `vX.Y.Z` git tag.
-- The tag triggers the `Docker` workflow, which builds and pushes the image to GHCR.
+- The tag triggers two workflows: `Docker` builds and pushes the image to GHCR, and `Publish npm package` runs
+  `bun publish` to publish `@mkm29/uds-headlamp-plugin` to the GitHub Packages npm registry
+  (`https://npm.pkg.github.com`).
 
 Configuration lives in `release-please-config.json` and `.release-please-manifest.json`.
+
+### Consuming the npm package
+
+The published package is scoped to `@mkm29` on GitHub Packages. To install it, point the scope at the registry in an
+`.npmrc` and authenticate with a token that has `read:packages`:
+
+```
+@mkm29:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+Then `npm install @mkm29/uds-headlamp-plugin` (or `bun add`). The tarball contains the built plugin (`dist/`).
 
 ### Maintainer setup: `RELEASE_PLEASE_TOKEN`
 
 Tags created with the default `GITHUB_TOKEN` do **not** start new workflow runs (GitHub's recursion guard), so the
-`vX.Y.Z` tag would not trigger the `Docker` build. To enable end-to-end automation, add a repository secret
-`RELEASE_PLEASE_TOKEN` — a fine-grained PAT (or GitHub App token) with `contents: write` and `pull-requests: write` on
-this repository. Without it, the release PR and GitHub Release still work, but the Docker image must be built by pushing
-the tag manually.
+`vX.Y.Z` tag would not trigger the `Docker` build or the `Publish npm package` workflow. To enable end-to-end
+automation, add a repository secret `RELEASE_PLEASE_TOKEN` — a fine-grained PAT (or GitHub App token) with
+`contents: write` and `pull-requests: write` on this repository. Without it, the release PR and GitHub Release still
+work, but the Docker image and npm package must be released by pushing the tag manually.
