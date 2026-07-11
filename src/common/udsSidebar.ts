@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
-import { registerSidebarEntry, registerSidebarEntryFilter } from '@kinvolk/headlamp-plugin/lib';
+import {
+  registerRouteFilter,
+  registerSidebarEntry,
+  registerSidebarEntryFilter,
+} from '@kinvolk/headlamp-plugin/lib';
 import { store } from '../settings/config';
 import { anyFeatureEnabled, DEFAULT_FLAGS, isFeatureEnabled } from '../settings/flags';
 import { currentCluster } from './cluster';
@@ -75,5 +79,14 @@ export function registerUdsCoreChild(opts: {
     !isFeatureEnabled(store.get() ?? DEFAULT_FLAGS, liveCluster(), opts.featureId, true)
       ? null
       : entry
+  );
+  // Gate this feature's routes on the same flag, so a disabled feature's page is
+  // not reachable by direct URL (matches the hidden sidebar entry). The feature's
+  // routes all register with `sidebar: opts.name`, so match on that.
+  registerRouteFilter(route =>
+    route.sidebar === opts.name &&
+    !isFeatureEnabled(store.get() ?? DEFAULT_FLAGS, liveCluster(), opts.featureId, true)
+      ? null
+      : route
   );
 }
