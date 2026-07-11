@@ -1,0 +1,31 @@
+name: Release Please
+on:
+  # Watch main: release PRs open when develop merges into main, and merging the
+  # release PR tags vX.Y.Z from main -- consistent with docker.yaml's
+  # "release on a v* tag cut from main" model.
+  push:
+    branches: [main]
+# Serialize releases on a branch; never cancel an in-flight release run.
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create GitHub releases + tags, push CHANGELOG/version bump
+      pull-requests: write # open + groom the release PR
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          # A PAT (or GitHub App token) is REQUIRED for the vX.Y.Z tag to trigger
+          # docker.yaml: tags created with the default GITHUB_TOKEN do NOT start
+          # new workflow runs (GitHub's recursion guard). Falls back to the
+          # default token when RELEASE_PLEASE_TOKEN is unset -- the release PR and
+          # GitHub Release still work, but the Docker build will NOT auto-fire.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
