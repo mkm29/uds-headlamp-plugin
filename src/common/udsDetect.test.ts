@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { UDS_GROUP, udsGroupsFromCrds } from './udsDetect';
+import { UDS_GROUP, udsCrdNames, udsGroupsFromCrds } from './udsDetect';
 
 describe('udsGroupsFromCrds', () => {
   it('collects distinct spec.group values', () => {
@@ -33,5 +33,25 @@ describe('udsGroupsFromCrds', () => {
   it('skips entries missing spec.group', () => {
     const crds = [{ spec: {} }, {}, { spec: { group: 'uds.dev' } }] as any;
     expect(udsGroupsFromCrds(crds)).toEqual(new Set([UDS_GROUP]));
+  });
+});
+
+describe('udsCrdNames', () => {
+  it('collects the names of uds.dev CRDs only', () => {
+    const crds = [
+      { metadata: { name: 'packages.uds.dev' }, spec: { group: 'uds.dev' } },
+      { metadata: { name: 'exemptions.uds.dev' }, spec: { group: 'uds.dev' } },
+      { metadata: { name: 'certificates.cert-manager.io' }, spec: { group: 'cert-manager.io' } },
+    ];
+    expect(udsCrdNames(crds)).toEqual(new Set(['packages.uds.dev', 'exemptions.uds.dev']));
+  });
+
+  it('is empty and never throws for null (RBAC-denied list)', () => {
+    expect(udsCrdNames(null)).toEqual(new Set());
+  });
+
+  it('skips uds.dev CRDs missing a metadata.name', () => {
+    const crds = [{ spec: { group: 'uds.dev' } }, { metadata: {}, spec: { group: 'uds.dev' } }] as any;
+    expect(udsCrdNames(crds)).toEqual(new Set());
   });
 });

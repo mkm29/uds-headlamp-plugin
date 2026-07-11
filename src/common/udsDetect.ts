@@ -20,12 +20,21 @@ import { K8s } from '@kinvolk/headlamp-plugin/lib';
 export interface UdsDetectResult {
   /** True when the uds.dev CRD group is present in the cluster. */
   hasUds: boolean;
-  /** The set of CRD groups observed (empty until detection is implemented). */
+  /** The set of CRD API groups observed. */
   groups: Set<string>;
+  /** The names of uds.dev CRDs present (e.g. "packages.uds.dev"). */
+  crdNames: Set<string>;
 }
 
 /** The CRD API group shared by Packages, Exemptions, and ClusterConfig. */
 export const UDS_GROUP = 'uds.dev';
+
+/** The UDS Core CRDs we expect, by name — used to report detection detail. */
+export const UDS_CRDS = ['packages.uds.dev', 'exemptions.uds.dev', 'clusterconfig.uds.dev'];
+
+/** The Pepr policy-engine deployment that enforces UDS policies. */
+export const PEPR_DEPLOYMENT = 'pepr-uds-core';
+export const PEPR_NAMESPACE = 'pepr-system';
 
 /** Pure: reduce a CRD list to the set of API groups present. Null-safe (RBAC-denied). */
 export function udsGroupsFromCrds(crds: Array<{ spec?: { group?: string } }> | null): Set<string> {
@@ -39,6 +48,19 @@ export function udsGroupsFromCrds(crds: Array<{ spec?: { group?: string } }> | n
   return groups;
 }
 
+/** Pure: the names of CRDs in the uds.dev group. Null-safe (RBAC-denied). */
+export function udsCrdNames(
+  crds: Array<{ metadata?: { name?: string }; spec?: { group?: string } }> | null
+): Set<string> {
+  const names = new Set<string>();
+  for (const c of crds ?? []) {
+    if (c?.spec?.group === UDS_GROUP && c?.metadata?.name) {
+      names.add(c.metadata.name);
+    }
+  }
+  return names;
+}
+
 /**
  * Detect whether UDS Core is installed in the current cluster. Reads are
  * impersonated, so a user lacking `list customresourcedefinitions` gets an
@@ -46,6 +68,16 @@ export function udsGroupsFromCrds(crds: Array<{ spec?: { group?: string } }> | n
  */
 export function useUdsDetect(): UdsDetectResult {
   const [crds] = K8s.ResourceClasses.CustomResourceDefinition.useList();
-  const groups = udsGroupsFromCrds(crds as Array<{ spec?: { group?: string } }> | null);
-  return { hasUds: groups.has(UDS_GROUP), groups };
+  const list = crds as Array<{ metadata?: { name?: string }; spec?: { group?: string } }> | null;
+  const groups = udsGroupsFromCrds(list);
+  return { hasUds: groups.has(UDS_GROUP), groups, crdNames: udsCrdNames(list) };
+}
+
+/**
+ * Detect the Pepr policy-engine deployment (pepr-uds-core in pepr-system).
+ * RBAC-graceful: absence, or a user who cannot get it, yields false.
+ */
+export function usePeprDetected(): boolean {
+  const [deploy] = K8s.ResourceClasses.Deployment.useGet(PEPR_DEPLOYMENT, PEPR_NAMESPACE);
+  return !!deploy;
 }
