@@ -65,9 +65,9 @@ Facts about the Headlamp APIs that constrain the choice:
 - **Sidebar-hide on *undetected* UDS Core is deferred.** A filter cannot read the detection hook, so an enabled feature
   whose CRDs are absent still shows its sidebar entry; the content-level empty state covers the UX. A non-hook detection
   cache that also hides the entry is a later refinement.
-- **Consistency across features is enforced by convention, not the type system.** The pattern (`registerUdsCoreChild`
-  - list route + detail route) is documented here and mirrored between Packages and Exemptions; reviewers check new
-    features against it.
+- **Consistency across features is enforced by convention, not the type system.** The pattern — `registerUdsCoreChild`
+  plus a list route and a detail route — is documented here and mirrored between Packages and Exemptions; reviewers
+  check new features against it.
 
 ## References
 
