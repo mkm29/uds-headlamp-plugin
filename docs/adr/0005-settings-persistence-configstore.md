@@ -51,8 +51,9 @@ Settings UI (mirroring Prometheus):
 1. A **per-feature enable toggle** generated from the `FEATURES` manifest, so the settings page never drifts from the
    registered feature set.
 1. Feature-specific inputs (e.g. a UDS operator namespace field, the namespace scoper's verb/resource probe) and a
-   **Test / Detect UDS Core** button that runs the detection routine and reports which `uds.dev` CRDs and the Pepr
-   webhook were found.
+   **Test / Detect UDS Core** button intended to run the detection routine and report which `uds.dev` CRDs and the Pepr
+   webhook were found. (Current state: the button is a scaffold no-op; the panel instead reports detection reactively
+   from the `useUdsDetect()` hook. Wiring the button to an explicit probe + CRD/webhook report is pending.)
 
 Cross-component config access uses the `useUdsConfig` hook from the store. If prop drilling becomes a problem we may
 adopt `use-between` (as Prometheus does) to share the hook; we do not add it pre-emptively.

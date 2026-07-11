@@ -48,6 +48,11 @@ export function isFeatureEnabled(cfg, cluster, id, dflt) {
 }
 ```
 
+The implementation factors the per-cluster object into a `ClusterFlags` interface (which also carries an optional
+`scoper` probe config) and puts these types, `DEFAULT_FLAGS`, and the pure helpers in `settings/flags.ts` — no Headlamp
+imports, so they are unit-tested in isolation. `settings/config.ts` holds only the `ConfigStore` instance and the
+`useUdsConfig` hook.
+
 **Feature contract.** Each feature declares its identity and default, and exposes a `register()`:
 
 ```ts
@@ -75,10 +80,13 @@ for (const f of FEATURES) {
 **Gating mechanism (the important part).** Because registration is one-shot, each feature registers its sidebar entries
 and routes **unconditionally** but pairs them with live filters and in-component guards that read the current config:
 
-- `registerSidebarEntryFilter` / `registerRouteFilter` run on every render and return `null` to hide an entry when its
-  flag is off (or when a `requiresUds` feature's detection fails).
-- Consumer components (detail sections, table columns) short-circuit on `useUdsConfig()` so live toggles hide content
-  **without a reload**.
+- `registerSidebarEntryFilter` runs on every render and returns `null` to hide a sidebar entry when its flag is off (the
+  shared `udsSidebar.ts` owner does this for the UDS Core tree — ADR-0008). **Route-level filtering
+  (`registerRouteFilter`) is not currently wired**, so a hidden feature's page is still reachable by direct URL — a
+  known gap.
+- Live per-flag content gating via `useUdsConfig()` is the intended mechanism for hiding content without a reload; today
+  the list components gate on `useUdsDetect()` (CRD presence) instead, and `useUdsConfig` is exported but not yet
+  consumed.
 
 Toggling a flag therefore hides content instantly where a live filter/guard covers it, and takes full structural effect
 on the next page reload — matching upstream Prometheus behavior.
@@ -98,6 +106,9 @@ on the next page reload — matching upstream Prometheus behavior.
 - **Discipline required.** Every feature must register unconditionally *and* add a matching live filter/guard. A feature
   that registers conditionally on the snapshot would become permanently invisible until reload after a toggle — the
   anti-pattern this ADR exists to prevent.
+- **`requiresUds` is declared but not yet consumed.** The `Feature.requiresUds` flag is set on the CR features but no
+  registration/filtering code reads it yet; detection-based hiding currently happens only via `useUdsDetect()` inside
+  list components. Wiring `requiresUds` into the sidebar/route gating is a documented gap.
 - **Unverified specifics.** The `ConfigStore` / `registerPluginSettings` API contract is normative here; exact
   Prometheus-plugin config key names were not verifiable from source and are treated as our own design, not copied
   identifiers.
