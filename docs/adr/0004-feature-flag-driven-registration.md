@@ -60,7 +60,6 @@ export interface Feature {
   id: string;
   title: string;
   defaultEnabled: boolean;
-  requiresUds?: boolean;              // gate on UDS Core detection
   register: (ctx: { enabled: boolean }) => void;
 }
 ```
@@ -106,9 +105,10 @@ on the next page reload — matching upstream Prometheus behavior.
 - **Discipline required.** Every feature must register unconditionally *and* add a matching live filter/guard. A feature
   that registers conditionally on the snapshot would become permanently invisible until reload after a toggle — the
   anti-pattern this ADR exists to prevent.
-- **`requiresUds` is declared but not yet consumed.** The `Feature.requiresUds` flag is set on the CR features but no
-  registration/filtering code reads it yet; detection-based hiding currently happens only via `useUdsDetect()` inside
-  list components. Wiring `requiresUds` into the sidebar/route gating is a documented gap.
+- **Detection-based hiding is content-level, by design.** The plugin does not auto-hide features on non-UDS clusters via
+  the sidebar/routes — those gate on the enable flag only, and ADR-0008 defers detection-driven sidebar hiding (a filter
+  cannot call the detection hook). Instead the list/detail components call `useUdsDetect()` and render a "UDS Core not
+  detected" state. (A `requiresUds` Feature flag was removed in issue #27 as dead config.)
 - **Unverified specifics.** The `ConfigStore` / `registerPluginSettings` API contract is normative here; exact
   Prometheus-plugin config key names were not verifiable from source and are treated as our own design, not copied
   identifiers.

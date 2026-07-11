@@ -27,7 +27,6 @@ export const packagesFeature: Feature = {
   id: FEATURE_ID,
   title: 'UDS Packages',
   defaultEnabled: true,
-  requiresUds: true,
   register() {
     registerUdsCoreChild({
       featureId: FEATURE_ID,

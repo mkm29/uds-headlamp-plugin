@@ -21,7 +21,6 @@ export const policyEngineFeature: Feature = {
   id: 'policyEngine',
   title: 'Policy Engine (Pepr)',
   defaultEnabled: true,
-  requiresUds: true,
   register() {
     // TODO(phase-3): a static catalog of the mutations + validations keyed to a
     // UDS version, a live pepr-uds-core / watcher health section, and workload
