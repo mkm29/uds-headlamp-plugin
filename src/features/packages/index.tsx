@@ -14,21 +14,13 @@
  * limitations under the License.
  */
 
-import { registerRoute, registerSidebarEntry, registerSidebarEntryFilter } from '@kinvolk/headlamp-plugin/lib';
-import { currentCluster } from '../../common/cluster';
-import { store } from '../../settings/config';
-import { DEFAULT_FLAGS, isFeatureEnabled } from '../../settings/flags';
+import { registerRoute } from '@kinvolk/headlamp-plugin/lib';
+import { registerUdsCoreChild } from '../../common/udsSidebar';
 import { Feature } from '../types';
 import { PackageDetail } from './Detail';
 import { PackagesList } from './List';
 
 const FEATURE_ID = 'packages';
-
-/** Live read of the enable flag from the current store snapshot (no hooks). */
-function packagesEnabled(): boolean {
-  const flags = store.get() ?? DEFAULT_FLAGS;
-  return isFeatureEnabled(flags, currentCluster() ?? '', FEATURE_ID, true);
-}
 
 /** Feature (2): UDS Packages CR (packages.uds.dev/v1alpha1). */
 export const packagesFeature: Feature = {
@@ -37,21 +29,12 @@ export const packagesFeature: Feature = {
   defaultEnabled: true,
   requiresUds: true,
   register() {
-    // Registration is one-shot (ADR-0004): always register the sidebar entries
-    // and route; visibility is gated live by the filter below (and by the
-    // !hasUds guard inside PackagesList), not by skipping registration here.
-    registerSidebarEntry({
-      parent: null,
-      name: 'uds-core',
-      label: 'UDS Core',
-      url: '/uds-core/packages',
-      icon: 'mdi:package-variant-closed',
-    });
-    registerSidebarEntry({
-      parent: 'uds-core',
+    registerUdsCoreChild({
+      featureId: FEATURE_ID,
       name: 'uds-packages',
       label: 'Packages',
       url: '/uds-core/packages',
+      icon: 'mdi:package-variant-closed',
     });
 
     registerRoute({
@@ -68,10 +51,5 @@ export const packagesFeature: Feature = {
       exact: true,
       component: () => <PackageDetail />,
     });
-
-    // Hide the UDS Core sidebar tree when the feature is toggled off (live).
-    registerSidebarEntryFilter(entry =>
-      (entry.name === 'uds-core' || entry.name === 'uds-packages') && !packagesEnabled() ? null : entry
-    );
   },
 };
