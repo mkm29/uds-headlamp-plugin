@@ -15,8 +15,8 @@
  */
 
 import { CommonComponents } from '@kinvolk/headlamp-plugin/lib';
-import { Box, Typography } from '@mui/material';
 import { useUdsDetect } from '../../common/udsDetect';
+import { UdsNotDetected } from '../../common/UdsNotDetected';
 import { countExemptions, distinctPolicies, Exemption, ExemptionObject, exemptionSpec } from './resource';
 
 const { ResourceListView, Link } = CommonComponents;
@@ -25,11 +25,7 @@ export function ExemptionsList() {
   const { hasUds } = useUdsDetect();
 
   if (!hasUds) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography>UDS Core not detected in this cluster.</Typography>
-      </Box>
-    );
+    return <UdsNotDetected />;
   }
 
   return (

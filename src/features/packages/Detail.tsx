@@ -17,6 +17,8 @@
 import { CommonComponents } from '@kinvolk/headlamp-plugin/lib';
 import { Box, Typography } from '@mui/material';
 import { useParams } from 'react-router-dom';
+import { useUdsDetect } from '../../common/udsDetect';
+import { UdsNotDetected } from '../../common/UdsNotDetected';
 import {
   AllowRule,
   AuthserviceClient,
@@ -48,6 +50,11 @@ function NameList({ items }: { items?: string[] }) {
 
 export function PackageDetail() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
+  const { hasUds } = useUdsDetect();
+
+  if (!hasUds) {
+    return <UdsNotDetected />;
+  }
 
   return (
     <DetailsGrid

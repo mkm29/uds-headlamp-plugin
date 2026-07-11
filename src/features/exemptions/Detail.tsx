@@ -17,6 +17,8 @@
 import { CommonComponents } from '@kinvolk/headlamp-plugin/lib';
 import { Box, Chip } from '@mui/material';
 import { useParams } from 'react-router-dom';
+import { useUdsDetect } from '../../common/udsDetect';
+import { UdsNotDetected } from '../../common/UdsNotDetected';
 import {
   countExemptions,
   distinctPolicies,
@@ -30,6 +32,11 @@ const { DetailsGrid, SectionBox, NameValueTable } = CommonComponents;
 
 export function ExemptionDetail() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
+  const { hasUds } = useUdsDetect();
+
+  if (!hasUds) {
+    return <UdsNotDetected />;
+  }
 
   return (
     <DetailsGrid
