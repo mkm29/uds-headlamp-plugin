@@ -67,6 +67,21 @@ export function isFeatureEnabled(
   return cfg?.clusters?.[cluster]?.features?.[id] ?? dflt;
 }
 
+/** True when at least one of `ids` is enabled for the cluster (default `dflt`). */
+export function anyFeatureEnabled(
+  cfg: UdsFlags | undefined,
+  cluster: string,
+  ids: Iterable<string>,
+  dflt: boolean
+): boolean {
+  for (const id of ids) {
+    if (isFeatureEnabled(cfg, cluster, id, dflt)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Return a new UdsFlags with the given feature toggled for one cluster.
  * Immutable: the input and other clusters/features are never mutated.
