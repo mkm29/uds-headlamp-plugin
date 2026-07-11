@@ -13,6 +13,7 @@
     "storybook": "headlamp-plugin storybook",
     "storybook-build": "headlamp-plugin storybook-build",
     "test": "headlamp-plugin test",
+    "test:coverage": "vitest run --coverage --coverage.provider=istanbul --coverage.reporter=text-summary --coverage.reporter=lcov --coverage.reporter=json-summary --reporter=default --reporter=junit --outputFile=test-results/junit.xml -c node_modules/@kinvolk/headlamp-plugin/config/vite.config.mjs",
     "i18n": "headlamp-plugin i18n"
   },
   "keywords": [
