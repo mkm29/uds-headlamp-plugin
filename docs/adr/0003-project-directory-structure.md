@@ -16,13 +16,15 @@ import time, and shared code has no obvious home. We want a structure where:
 - The plugin entry point (`index.tsx`) has no knowledge of feature internals — it only iterates a manifest.
 - Nothing registers with Headlamp as an import side effect; registration happens only inside an explicit `register()`
   call the entry point drives (this keeps the one-shot registration event in ADR-0002 predictable and testable).
-- Shared Custom Resource classes and detection hooks have a single home so features don't duplicate them.
+- Cross-cutting helpers (UDS detection, cluster resolution, the shared UDS Core sidebar owner) have a single home so
+  features don't duplicate them. Custom Resource classes, by contrast, live per feature (ADR-0007).
 
 Headlamp-specific facts that shape the layout:
 
 - The entry module is `src/index.tsx`; the build emits `dist/main.js` + `package.json`.
-- Custom resources use `makeCustomResourceClass` from `@kinvolk/headlamp-plugin/lib/K8s/crd`; `Packages`, `Exemptions`,
-  and `ClusterConfig` all share the `uds.dev` group, so their classes are naturally shared.
+- Custom resources use `makeCustomResourceClass` from `@kinvolk/headlamp-plugin/lib/Crd` (a top-level re-export; deep
+  submodule paths crash the plugin — see ADR-0007). Although `Packages`, `Exemptions`, and `ClusterConfig` share the
+  `uds.dev` group, each feature owns its own `resource.ts` (ADR-0007) rather than a shared CR-class module.
 - Settings are one component registered via `registerPluginSettings`, backed by a `ConfigStore` wrapper (see ADR-0004).
 
 ## Decision
@@ -37,7 +39,8 @@ uds-core-headlamp-plugin/
 │   ├── index.tsx                # entry: reads flags, iterates manifest, calls feature.register()
 │   ├── settings/
 │   │   ├── Settings.tsx         # registerPluginSettings component
-│   │   └── config.ts            # ConfigStore wrapper + types + defaults + per-cluster helpers
+│   │   ├── flags.ts             # UdsFlags/ClusterFlags types, defaults, pure helpers (no Headlamp deps)
+│   │   └── config.ts            # the ConfigStore instance + useUdsConfig hook
 │   ├── features/
 │   │   ├── manifest.ts          # FEATURES: Feature[] — the single source of truth
 │   │   ├── types.ts             # Feature interface
@@ -47,9 +50,9 @@ uds-core-headlamp-plugin/
 │   │   ├── clusterConfig/       # (4) ClusterConfig CR
 │   │   └── policyEngine/        # (5) Pepr policy status
 │   ├── common/
-│   │   ├── udsDetect.ts         # CRD/Pepr detection hooks
-│   │   ├── Resources.ts         # shared CR classes (group uds.dev)
-│   │   └── components/          # StatusLabel wrappers, condition tables, etc.
+│   │   ├── cluster.ts           # current-cluster resolution (URL-parsed)
+│   │   ├── udsDetect.ts         # UDS Core CRD detection hook
+│   │   └── udsSidebar.ts        # shared UDS Core sidebar owner (ADR-0008)
 │   └── i18n/
 └── README.md
 ```
@@ -60,7 +63,8 @@ The governing principles are:
    `resource.ts`, `List.tsx`, `Detail.tsx`, etc.
 1. **`index.tsx` only knows the manifest.** It imports `FEATURES` and the settings component, and nothing else from
    inside `features/`.
-1. **Shared CR classes and detection hooks live in `common/`**, not duplicated per feature.
+1. **Each feature owns its CR class** in its own `resource.ts` (ADR-0007). Only *cross-cutting* helpers — UDS detection,
+   cluster resolution, and the shared sidebar owner — live in `common/`, not duplicated per feature.
 1. **No import-time side effects.** Registration runs only inside `register()`.
 
 ## Consequences
@@ -69,8 +73,9 @@ The governing principles are:
   `manifest.ts`. Reviewers see the whole feature in one place.
 - The entry point stays thin and stable; changes to a feature rarely touch `index.tsx`, reducing merge conflicts on the
   hot file.
-- The `common/` boundary must be actively maintained — CR classes and detection logic belong there, and features must
-  resist inlining their own copies. Code review enforces this; there is no compiler-level guard.
+- The `common/` boundary must be actively maintained — cross-cutting helpers (detection, cluster resolution, the shared
+  sidebar owner) belong there, while CR classes stay per-feature (ADR-0007). Code review enforces this; there is no
+  compiler-level guard.
 - The layout assumes the `Feature` interface and the ConfigStore-backed flag model from ADR-0004. This ADR fixes *where*
   code lives; ADR-0004 fixes *how* features are gated.
 - The directory names above are illustrative of intent, not a frozen contract; the principles (self-contained features,
