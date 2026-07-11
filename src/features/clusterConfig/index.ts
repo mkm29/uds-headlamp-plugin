@@ -21,7 +21,6 @@ export const clusterConfigFeature: Feature = {
   id: 'clusterConfig',
   title: 'Cluster Config',
   defaultEnabled: true,
-  requiresUds: true,
   register() {
     // TODO(phase-3): single route + sidebar entry rendering the read-only
     // uds-cluster-config singleton (attributes, expose, networking, caBundle

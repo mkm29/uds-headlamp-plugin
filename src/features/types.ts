@@ -25,8 +25,6 @@ export interface Feature {
   title: string;
   /** Default enablement when no per-cluster override exists. */
   defaultEnabled: boolean;
-  /** When true, the feature hides itself if UDS Core is not detected. */
-  requiresUds?: boolean;
   /**
    * Called exactly once at plugin load (ADR-0004). Registration is one-shot, so
    * this should register unconditionally and gate visibility with live filters/

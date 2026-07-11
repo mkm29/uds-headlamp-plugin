@@ -27,7 +27,6 @@ export const exemptionsFeature: Feature = {
   id: FEATURE_ID,
   title: 'Exemptions',
   defaultEnabled: true,
-  requiresUds: true,
   register() {
     registerUdsCoreChild({
       featureId: FEATURE_ID,
