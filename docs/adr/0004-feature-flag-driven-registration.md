@@ -80,10 +80,10 @@ for (const f of FEATURES) {
 **Gating mechanism (the important part).** Because registration is one-shot, each feature registers its sidebar entries
 and routes **unconditionally** but pairs them with live filters and in-component guards that read the current config:
 
-- `registerSidebarEntryFilter` runs on every render and returns `null` to hide a sidebar entry when its flag is off (the
-  shared `udsSidebar.ts` owner does this for the UDS Core tree — ADR-0008). **Route-level filtering
-  (`registerRouteFilter`) is not currently wired**, so a hidden feature's page is still reachable by direct URL — a
-  known gap.
+- `registerSidebarEntryFilter` runs on every render and returns `null` to hide a sidebar entry when its flag is off, and
+  `registerRouteFilter` does the same for the feature's routes (matched by `route.sidebar`) so a disabled feature's page
+  is not reachable by direct URL. The shared `udsSidebar.ts` owner installs both filters for the UDS Core tree
+  (ADR-0008; issue #26).
 - Live per-flag content gating via `useUdsConfig()` is the intended mechanism for hiding content without a reload; today
   the list components gate on `useUdsDetect()` (CRD presence) instead, and `useUdsConfig` is exported but not yet
   consumed.
