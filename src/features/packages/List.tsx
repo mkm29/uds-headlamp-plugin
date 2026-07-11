@@ -15,8 +15,8 @@
  */
 
 import { CommonComponents } from '@kinvolk/headlamp-plugin/lib';
-import { Box, Typography } from '@mui/material';
 import { useUdsDetect } from '../../common/udsDetect';
+import { UdsNotDetected } from '../../common/UdsNotDetected';
 import { Package, PackageObject, packageStatus, phaseToStatus } from './resource';
 
 const { Link, ResourceListView, StatusLabel } = CommonComponents;
@@ -30,11 +30,7 @@ export function PackagesList() {
   const { hasUds } = useUdsDetect();
 
   if (!hasUds) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography>UDS Core not detected in this cluster.</Typography>
-      </Box>
-    );
+    return <UdsNotDetected />;
   }
 
   return (
