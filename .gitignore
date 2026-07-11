@@ -5,3 +5,5 @@ build/
 .superpowers
 coverage/
 test-results/
+# headlamp-plugin package output (attached to the GitHub Release in CI)
+*.tar.gz
