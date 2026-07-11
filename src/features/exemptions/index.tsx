@@ -14,21 +14,13 @@
  * limitations under the License.
  */
 
-import { registerRoute, registerSidebarEntry, registerSidebarEntryFilter } from '@kinvolk/headlamp-plugin/lib';
-import { currentCluster } from '../../common/cluster';
-import { store } from '../../settings/config';
-import { DEFAULT_FLAGS, isFeatureEnabled } from '../../settings/flags';
+import { registerRoute } from '@kinvolk/headlamp-plugin/lib';
+import { registerUdsCoreChild } from '../../common/udsSidebar';
 import { Feature } from '../types';
 import { ExemptionDetail } from './Detail';
 import { ExemptionsList } from './List';
 
 const FEATURE_ID = 'exemptions';
-
-/** Live read of the enable flag (no hooks -- used inside the sidebar filter). */
-function exemptionsEnabled(): boolean {
-  const flags = store.get() ?? DEFAULT_FLAGS;
-  return isFeatureEnabled(flags, currentCluster() ?? '', FEATURE_ID, true);
-}
 
 /** Feature (3): Exemptions CR (exemptions.uds.dev/v1alpha1). */
 export const exemptionsFeature: Feature = {
@@ -37,16 +29,8 @@ export const exemptionsFeature: Feature = {
   defaultEnabled: true,
   requiresUds: true,
   register() {
-    // Shared UDS Core parent -- idempotent (sidebar entries keyed by name).
-    registerSidebarEntry({
-      parent: null,
-      name: 'uds-core',
-      label: 'UDS Core',
-      url: '/uds-core/exemptions',
-      icon: 'mdi:package-variant-closed',
-    });
-    registerSidebarEntry({
-      parent: 'uds-core',
+    registerUdsCoreChild({
+      featureId: FEATURE_ID,
       name: 'uds-exemptions',
       label: 'Exemptions',
       url: '/uds-core/exemptions',
@@ -66,10 +50,5 @@ export const exemptionsFeature: Feature = {
       exact: true,
       component: () => <ExemptionDetail />,
     });
-
-    // Gate ONLY our own child; the shared parent is owned collectively.
-    registerSidebarEntryFilter(entry =>
-      entry.name === 'uds-exemptions' && !exemptionsEnabled() ? null : entry
-    );
   },
 };

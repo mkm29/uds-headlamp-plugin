@@ -83,3 +83,22 @@ describe('scoper config', () => {
     expect(getScoperConfig(withScoper, 'c1').verb).toBe('watch');
   });
 });
+
+import { anyFeatureEnabled } from './flags';
+
+describe('anyFeatureEnabled', () => {
+  const cfg = { autoDetect: true, clusters: { c1: { features: { a: false, b: true } } } };
+  it('is true when any id is enabled', () => {
+    expect(anyFeatureEnabled(cfg, 'c1', ['a', 'b'], true)).toBe(true);
+  });
+  it('is false when every id is explicitly disabled', () => {
+    expect(anyFeatureEnabled(cfg, 'c1', ['a'], true)).toBe(false);
+  });
+  it('falls back to the default for absent ids', () => {
+    expect(anyFeatureEnabled(cfg, 'c1', ['missing'], true)).toBe(true);
+    expect(anyFeatureEnabled(cfg, 'c1', ['missing'], false)).toBe(false);
+  });
+  it('is false for an empty id list', () => {
+    expect(anyFeatureEnabled(cfg, 'c1', [], true)).toBe(false);
+  });
+});
