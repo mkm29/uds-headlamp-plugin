@@ -42,7 +42,6 @@ export interface UdsFlags {
   };
 }
 export const store = new ConfigStore<UdsFlags>('uds-core');
-export const useUdsConfig = store.useConfig();
 export function isFeatureEnabled(cfg, cluster, id, dflt) {
   return cfg?.clusters?.[cluster]?.features?.[id] ?? dflt;
 }
@@ -50,8 +49,7 @@ export function isFeatureEnabled(cfg, cluster, id, dflt) {
 
 The implementation factors the per-cluster object into a `ClusterFlags` interface (which also carries an optional
 `scoper` probe config) and puts these types, `DEFAULT_FLAGS`, and the pure helpers in `settings/flags.ts` — no Headlamp
-imports, so they are unit-tested in isolation. `settings/config.ts` holds only the `ConfigStore` instance and the
-`useUdsConfig` hook.
+imports, so they are unit-tested in isolation. `settings/config.ts` holds only the `ConfigStore` instance.
 
 **Feature contract.** Each feature declares its identity and default, and exposes a `register()`:
 
@@ -83,9 +81,9 @@ and routes **unconditionally** but pairs them with live filters and in-component
   `registerRouteFilter` does the same for the feature's routes (matched by `route.sidebar`) so a disabled feature's page
   is not reachable by direct URL. The shared `udsSidebar.ts` owner installs both filters for the UDS Core tree
   (ADR-0008; issue #26).
-- Live per-flag content gating via `useUdsConfig()` is the intended mechanism for hiding content without a reload; today
-  the list components gate on `useUdsDetect()` (CRD presence) instead, and `useUdsConfig` is exported but not yet
-  consumed.
+- Content gating relies on the enable-flag sidebar/route filters above plus the list/detail `useUdsDetect()` empty
+  states; there is no separate reactive per-flag content hook. (The `useUdsConfig` reactive config hook was removed in
+  issue #28 as unused; re-add it if a component ever needs to react live to config changes.)
 
 Toggling a flag therefore hides content instantly where a live filter/guard covers it, and takes full structural effect
 on the next page reload — matching upstream Prometheus behavior.

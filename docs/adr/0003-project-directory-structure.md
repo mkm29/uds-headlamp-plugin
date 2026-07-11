@@ -40,7 +40,7 @@ uds-core-headlamp-plugin/
 │   ├── settings/
 │   │   ├── Settings.tsx         # registerPluginSettings component
 │   │   ├── flags.ts             # UdsFlags/ClusterFlags types, defaults, pure helpers (no Headlamp deps)
-│   │   └── config.ts            # the ConfigStore instance + useUdsConfig hook
+│   │   └── config.ts            # the ConfigStore instance
 │   ├── features/
 │   │   ├── manifest.ts          # FEATURES: Feature[] — the single source of truth
 │   │   ├── types.ts             # Feature interface
