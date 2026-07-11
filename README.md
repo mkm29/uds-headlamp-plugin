@@ -26,8 +26,9 @@ A single `Release` workflow (`.github/workflows/release.yaml`) drives the whole 
 - On every push to `main`, the `release-please` job opens (or updates) a **release PR** that maintains `CHANGELOG.md`
   and bumps the version in `package.json` (`fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE` → major).
 - Merging the release PR runs the workflow again; the same run creates a GitHub Release and a `vX.Y.Z` git tag, then —
-  gated on `release_created` — the `image` job builds and pushes the multi-arch (amd64/arm64) container image to GHCR
-  with signed SLSA build-provenance and SBOM attestations.
+  gated on `release_created` — two jobs run: `image` builds and pushes the multi-arch (amd64/arm64) container image to
+  GHCR with signed SLSA build-provenance and SBOM attestations, and `package` runs `bun run build && bun run package`
+  and attaches the plugin tarball (`uds-core-<version>.tar.gz`) to the GitHub Release.
 
 Because the image build is a dependent job in the same run (not a separate tag-triggered workflow), it fires on the
 normal merge-to-`main` push and needs no personal access token.
