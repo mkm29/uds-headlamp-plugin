@@ -1,13 +1,7 @@
 {
-  "name": "@mkm29/uds-headlamp-plugin",
+  "name": "uds-core",
   "version": "0.1.0",
   "description": "UDS Core Headlamp plugin",
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "start": "headlamp-plugin start",
     "build": "headlamp-plugin build",

@@ -1,9 +1,0 @@
-# zizmor configuration. https://docs.zizmor.sh/configuration/
-rules:
-  # GitHub Packages (npm.pkg.github.com) does not support npm OIDC "trusted
-  # publishing" -- that is an npmjs.org feature. The publish job authenticates
-  # with the built-in GITHUB_TOKEN, which is already short-lived and job-scoped,
-  # so this audit does not apply to npm-publish.yaml.
-  use-trusted-publishing:
-    ignore:
-      - npm-publish.yaml

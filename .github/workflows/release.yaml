@@ -1,13 +1,17 @@
-name: Docker
+name: Release
 on:
-  # Release-only: build + push exclusively on a version tag (v*). Release tags
-  # are cut from main, so this is the "release on main" trigger. Note: GitHub
-  # cannot filter tag pushes by branch in `on:` (see the guard note in PR #20).
+  # Single entry point for releases: release-please grooms the release PR on
+  # every push to main, and when the release PR is merged the same run creates
+  # the GitHub Release + vX.Y.Z tag AND builds/pushes the image. Chaining the
+  # image build as a dependent job (instead of a separate tag-triggered
+  # workflow) means it fires on the normal merge-to-main push -- so no PAT is
+  # required to work around the "GITHUB_TOKEN-made tag can't trigger workflows"
+  # recursion guard.
   push:
-    tags: ["v*"]
+    branches: [main]
 concurrency:
-  group: docker-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   contents: read
 env:
@@ -15,8 +19,30 @@ env:
   # github.repository is "mkm29/uds-headlamp-plugin" (already lowercase, GHCR-safe).
   IMAGE_NAME: ${{ github.repository }}
 jobs:
-  build-push:
-    name: build & push
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create GitHub releases + tags, push CHANGELOG/version bump
+      pull-requests: write # open + groom the release PR
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # A PAT (RELEASE_PLEASE_TOKEN) is optional here: it is only needed if you
+      # want CI checks to run on the release PR itself (PRs opened with the
+      # default GITHUB_TOKEN do not trigger other workflows). The image build
+      # below does not depend on it -- it chains off this job in the same run.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+  image:
+    name: build & push image
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,9 +50,11 @@ jobs:
       id-token: write # GitHub artifact attestations (OIDC, keyless signing)
       attestations: write # write build-provenance + SBOM attestations
     steps:
+      # Build the released code: check out the tag release-please just created.
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           persist-credentials: false
+          ref: ${{ needs.release-please.outputs.tag_name }}
       # QEMU enables the linux/arm64 build on the amd64 runner.
       - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
@@ -41,20 +69,20 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Only version tags trigger this workflow, so emit semver tags plus a
-          # short-sha tag for traceability. metadata-action's default
-          # latest=auto also tags the newest non-prerelease release as `latest`.
+          # This run is a branch push, not a tag push, so feed metadata-action the
+          # release version explicitly via `value=`. Emit semver + short-sha tags,
+          # and tag this release `latest` (release-please cuts full releases).
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
             type=sha,format=short
+            type=raw,value=latest
       - name: Build and push
         id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          # This workflow only runs on a version tag, so always push.
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -62,10 +90,9 @@ jobs:
           # Cluster-specific inlining stays a deploy-time concern (see tasks.yaml).
           build-args: |
             CANDIDATE_NAMESPACES=
-          # Release-only workflow: GHA cache is isolated per Git ref, so separate
-          # tags can't share it. Use a registry-backed cache image in GHCR, which
-          # any release build can read/write -- warming each release from the
-          # previous. mode=max caches intermediate layers too (multi-arch).
+          # Registry-backed cache image in GHCR: any release build can read/write
+          # it, warming each release from the previous. mode=max caches
+          # intermediate layers too (multi-arch).
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
           provenance: true
@@ -74,8 +101,7 @@ jobs:
           # generated and attested separately below, after the image exists.
           sbom: false
       # Signed SLSA build-provenance attestation pushed to the registry. Keyless
-      # via the workflow OIDC token; verify with `gh attestation verify`. Replaces
-      # the previous cosign step (same Sigstore-backed signing, GitHub-native).
+      # via the workflow OIDC token; verify with `gh attestation verify`.
       - name: Attest build provenance
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
